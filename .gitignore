@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+**/node_modules/
+
+# next.js
+.next/
+**/ .next/
+
+# local temp and test files
+tmp/
+**/tmp/
+thesis-reviewer/tesis_con_errores.docx
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+
+# build
+/build
+/out

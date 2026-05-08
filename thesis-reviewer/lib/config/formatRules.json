@@ -1,0 +1,132 @@
+{
+  "global": {
+    "pageSize": { "width": 21.0, "height": 29.7, "unit": "cm", "name": "A4" },
+    "font": { "name": "Times New Roman", "size": 24, "sizeHp": true, "color": "000000" },
+    "margins": {
+      "top": 1417,
+      "bottom": 1417,
+      "left": 1985,
+      "right": 1417,
+      "unit": "twips",
+      "display": {
+        "top": "2.5 cm",
+        "bottom": "2.5 cm",
+        "left": "3.5 cm",
+        "right": "2.5 cm"
+      }
+    },
+    "lineSpacing": { "value": 480, "rule": "auto", "display": "2.0" },
+    "paragraphSpacing": { "before": 0, "after": 200, "display": { "before": "0 pto", "after": "10 pto" } },
+    "indent": { "firstLine": 709, "unit": "twips", "display": "1.25 cm" },
+    "pageNumbering": { "position": "bottom", "alignment": "center" }
+  },
+  "structure": {
+    "requiredSections": [
+      { "id": "portada", "name": "PORTADA", "required": true, "keywords": ["UNIVERSIDAD NACIONAL DEL ALTIPLANO"] },
+      { "id": "similitud", "name": "REPORTE DE SIMILITUD", "required": true, "keywords": ["REPORTE DE SIMILITUD"] },
+      { "id": "jurados", "name": "HOJA DE JURADOS", "required": true, "keywords": ["APROBADA POR EL JURADO REVISOR", "JURADO REVISOR"] },
+      { "id": "dedicatoria", "name": "DEDICATORIA", "required": true, "keywords": ["DEDICATORIA"] },
+      { "id": "agradecimientos", "name": "AGRADECIMIENTOS", "required": true, "keywords": ["AGRADECIMIENTOS"] },
+      { "id": "indiceGeneral", "name": "ÍNDICE GENERAL", "required": true, "keywords": ["ÍNDICE GENERAL"] },
+      { "id": "indiceTablas", "name": "ÍNDICE DE TABLAS", "required": false, "keywords": ["ÍNDICE DE TABLAS"] },
+      { "id": "indiceFiguras", "name": "ÍNDICE DE FIGURAS", "required": false, "keywords": ["ÍNDICE DE FIGURAS"] },
+      { "id": "indiceAnexos", "name": "ÍNDICE DE ANEXOS", "required": false, "keywords": ["ÍNDICE DE ANEXOS"] },
+      { "id": "acronimos", "name": "ACRÓNIMOS", "required": false, "keywords": ["ACRÓNIMOS"] },
+      { "id": "resumen", "name": "RESUMEN", "required": true, "keywords": ["RESUMEN"] },
+      { "id": "abstract", "name": "ABSTRACT", "required": true, "keywords": ["ABSTRACT"] },
+      { "id": "capituloI", "name": "CAPÍTULO I - INTRODUCCIÓN", "required": true, "keywords": ["CAPÍTULO I", "CAPITULO I"] },
+      { "id": "capituloII", "name": "CAPÍTULO II - REVISIÓN DE LITERATURA", "required": true, "keywords": ["CAPÍTULO II", "CAPITULO II"] },
+      { "id": "capituloIII", "name": "CAPÍTULO III - MATERIALES Y MÉTODOS", "required": true, "keywords": ["CAPÍTULO III", "CAPITULO III"] },
+      { "id": "capituloIV", "name": "CAPÍTULO IV - RESULTADOS Y DISCUSIÓN", "required": true, "keywords": ["CAPÍTULO IV", "CAPITULO IV"] },
+      { "id": "conclusiones", "name": "V. CONCLUSIONES", "required": true, "keywords": ["CONCLUSIONES"] },
+      { "id": "recomendaciones", "name": "VI. RECOMENDACIONES", "required": true, "keywords": ["RECOMENDACIONES"] },
+      { "id": "referencias", "name": "VII. REFERENCIAS BIBLIOGRÁFICAS", "required": true, "keywords": ["REFERENCIAS BIBLIOGRÁFICAS", "REFERENCIAS BIBLIOGRAFICAS"] },
+      { "id": "anexos", "name": "ANEXOS", "required": true, "keywords": ["ANEXOS"] }
+    ]
+  },
+  "sections": {
+    "resumen": {
+      "minWords": 250,
+      "maxWords": 300,
+      "requireKeywords": true,
+      "keywordsLabel": "Palabras clave:",
+      "keywordsLabelBold": true,
+      "keywordsAlphabetical": true
+    },
+    "abstract": {
+      "requireKeywords": true,
+      "keywordsLabel": "Keywords:",
+      "keywordsLabelBold": true
+    },
+    "portada": {
+      "alignment": "center",
+      "bold": true,
+      "noIndent": true,
+      "universityFontSize": 36,
+      "facultyFontSize": 32,
+      "schoolFontSize": 28,
+      "titleFontSize": 28,
+      "thesisFontSize": 32,
+      "authorFontSize": 28,
+      "logoWidth": "4.33cm",
+      "logoHeight": "4.68cm"
+    },
+    "jurados": {
+      "lineSpacing": 360,
+      "lineSpacingDisplay": "1.5",
+      "juradoNameSize": 22,
+      "juradoNameSizeDisplay": "11 ptos"
+    },
+    "referencias": {
+      "lineSpacing": 360,
+      "lineSpacingDisplay": "1.5",
+      "hangingIndent": 709,
+      "hangingIndentDisplay": "1.25 cm"
+    }
+  },
+  "titles": {
+    "level1": {
+      "description": "Capítulos (CAPÍTULO I, II, III, IV)",
+      "fontSize": 32,
+      "fontSizeDisplay": "16 ptos",
+      "alignment": "center",
+      "bold": true,
+      "case": "upper"
+    },
+    "level1Name": {
+      "description": "Nombre del capítulo (INTRODUCCIÓN, etc.)",
+      "fontSize": 28,
+      "fontSizeDisplay": "14 ptos",
+      "alignment": "center",
+      "bold": true,
+      "case": "upper"
+    },
+    "level2": {
+      "description": "Títulos de nivel 2 (1.1., 2.1., etc.)",
+      "fontSize": 24,
+      "fontSizeDisplay": "12 ptos",
+      "bold": true,
+      "case": "upper",
+      "indentLeft": 0,
+      "hangingIndent": 709
+    },
+    "level3": {
+      "description": "Títulos de nivel 3 (1.1.1., etc.)",
+      "fontSize": 24,
+      "fontSizeDisplay": "12 ptos",
+      "bold": true,
+      "case": "lower",
+      "indentLeft": 709,
+      "hangingIndent": 709
+    },
+    "level4": {
+      "description": "Títulos de nivel 4 y 5",
+      "fontSize": 24,
+      "fontSizeDisplay": "12 ptos",
+      "bold": true,
+      "case": "lower",
+      "indentLeft": 1418,
+      "hangingIndent": 851
+    }
+  }
+}

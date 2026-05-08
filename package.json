@@ -1,0 +1,15 @@
+{
+  "name": "revisor-de-tesis-pachacutec",
+  "version": "1.0.0",
+  "main": "extract_pdf.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "pdf-parse": "^2.4.5"
+  }
+}
