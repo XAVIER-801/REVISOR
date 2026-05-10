@@ -22,12 +22,14 @@ export default function RootLayout({ children }) {
         <header className="header-crypto">
           <div className="container-crypto" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             {/* LOGO AREA */}
-            <div className="flex items-center gap-3">
-              <img src="/images/logo_geometric.png" alt="Logo" style={{ height: '40px' }} />
-              <div className="flex flex-col">
-                 <span style={{ fontSize: '1.3rem', fontWeight: 900, letterSpacing: '-0.04em', lineHeight: '1' }}>RepoStyle</span>
-                 <span style={{ fontSize: '0.6rem', color: '#45F5E5', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.15em' }}>UNAP Intelligence</span>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div className="flex items-center gap-3">
+                <img src="/images/logo_geometric.png" alt="Logo" style={{ height: '40px' }} />
+                <span style={{ fontSize: '1.4rem', fontWeight: 900, letterSpacing: '-0.04em', lineHeight: '1' }}>RepoStyle</span>
               </div>
+              <span style={{ fontSize: '0.65rem', color: '#45F5E5', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.2em', marginTop: '0.3rem', paddingLeft: '3px' }}>
+                Auditor de Formato
+              </span>
             </div>
             
             {/* NAV LINKS - CENTERED */}

@@ -19,7 +19,7 @@ export default function Home() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [showPreview, setShowPreview] = useState(false);
 
-  const pdfUrl = "https://repositorio.unap.edu.pe/server/api/core/bitstreams/ed595449-d1f1-4bcf-880b-1f9d767f4222/content";
+  const pdfUrl = "/guia.pdf";
 
   const uploadFile = async (fileToUpload) => {
     if (!fileToUpload) return;
