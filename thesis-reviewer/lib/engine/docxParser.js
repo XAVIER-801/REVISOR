@@ -10,29 +10,20 @@
  * (bold, fontSize, fontName) and applies them to any runs that don't have
  * those properties set explicitly.
  */
-const JSZip = require('jszip');
-const xml2js = require('xml2js');
-const {
+import JSZip from 'jszip';
+import xml2js from 'xml2js';
+import {
   getParagraphText,
   getParagraphProperties,
   getRunProperties,
   getSectionProperties,
-  getDefaultRunProps
-} = require('../utils/ooxmlHelpers');
+  getDefaultRunProps,
+  extractTextFromNode
+} from '../utils/ooxmlHelpers';
+import ocrEngine from '../utils/ocrEngine';
 
-// We need the text extractor from the helpers
-function extractTextFromNode(t) {
-  if (!t) return '';
-  if (typeof t === 'string') return t;
-  if (typeof t === 'number') return t.toString();
-  if (Array.isArray(t)) return t.map(item => extractTextFromNode(item)).join('');
-  if (typeof t === 'object') {
-    if (t._ !== undefined) return String(t._);
-    if (t.$ && Object.keys(t).length === 1) return '';
-    return '';
-  }
-  return '';
-}
+// Unificamos la extracción de texto usando los helpers robustos
+
 
 class DocxParser {
   constructor(buffer) {
@@ -52,8 +43,21 @@ class DocxParser {
 
     // 2. Parse document.xml
     const documentXmlStr = await this.zip.file('word/document.xml').async('string');
-    const parser = new xml2js.Parser({ explicitArray: false, preserveChildrenOrder: true });
+    const parser = new xml2js.Parser({ explicitArray: false, preserveChildrenOrder: false });
     this.documentXml = await parser.parseStringPromise(documentXmlStr);
+
+    // 2b. Parse document.xml.rels to resolve image paths
+    const relsFile = this.zip.file('word/_rels/document.xml.rels');
+    this.relsMap = {};
+    if (relsFile) {
+      const relsXmlStr = await relsFile.async('string');
+      const relsXml = await parser.parseStringPromise(relsXmlStr);
+      let relList = relsXml.Relationships.Relationship;
+      if (!Array.isArray(relList)) relList = [relList];
+      relList.forEach(rel => {
+        this.relsMap[rel.$.Id] = rel.$.Target;
+      });
+    }
 
     // 3. Parse styles.xml if exists — build a style map for inheritance
     const stylesFile = this.zip.file('word/styles.xml');
@@ -72,6 +76,13 @@ class DocxParser {
 
     // 6. Extract all paragraphs with their properties
     this.paragraphs = this._extractParagraphs(body);
+
+    // ESTRATEGIA "HUNTER": Activamos OCR inteligente para encontrar actas escaneadas
+    // Blindamos este proceso para que un fallo en OCR no detenga el análisis principal
+    // OCR desactivado temporalmente para estabilizar el análisis rápido
+    // await this._processImagesWithOCR();
+
+
 
     return {
       paragraphs: this.paragraphs,
@@ -168,44 +179,200 @@ class DocxParser {
   }
 
   _extractParagraphs(body) {
-    const paragraphElements = body['w:p'];
-    if (!paragraphElements) return [];
-
-    const pList = Array.isArray(paragraphElements) ? paragraphElements : [paragraphElements];
+    const allParagraphs = [];
     
-    return pList.map((p, index) => {
-      const text = getParagraphText(p);
-      const props = getParagraphProperties(p);
-      const runs = this._extractRuns(p, props.style);
+    const walk = (node) => {
+      if (!node || typeof node !== 'object') return;
+      
+      // If this object IS a paragraph or has w:p children
+      if (node['w:p']) {
+        const pList = Array.isArray(node['w:p']) ? node['w:p'] : [node['w:p']];
+        pList.forEach(p => {
+          const text = getParagraphText(p);
+          const props = getParagraphProperties(p);
+          const runs = this._extractRuns(p, props.style);
+          const images = this._findImageIds(p);
 
-      return {
-        index,
-        text: text.trim(),
-        rawText: text,
-        properties: props,
-        runs,
-        raw: p
-      };
+          allParagraphs.push({
+            index: allParagraphs.length,
+            text: text.trim(),
+            rawText: text,
+            properties: props,
+            runs,
+            images,
+            raw: p
+          });
+        });
+      }
+      
+      // ALWAYS walk other keys, even if we found w:p
+      // (Because an object might have w:p AND w:tbl as siblings)
+      for (const key in node) {
+        if (key === '$' || key === 'w:p') continue; // Already processed w:p
+        const child = node[key];
+        if (Array.isArray(child)) {
+          child.forEach(c => walk(c));
+        } else {
+          walk(child);
+        }
+      }
+    };
+
+    walk(body);
+    return allParagraphs;
+  }
+
+  _findImageIds(p) {
+    const imageIds = [];
+    
+    // Look for w:drawing
+    const walk = (node) => {
+      if (!node) return;
+      if (node['w:drawing']) {
+        const drawings = Array.isArray(node['w:drawing']) ? node['w:drawing'] : [node['w:drawing']];
+        drawings.forEach(d => {
+          // Look for blip
+          const blip = this._findInObject(d, 'a:blip');
+          if (blip && blip.$ && blip.$['r:embed']) {
+            imageIds.push(blip.$['r:embed']);
+          }
+        });
+      }
+      if (node['w:pict']) {
+        const picts = Array.isArray(node['w:pict']) ? node['w:pict'] : [node['w:pict']];
+        picts.forEach(pict => {
+          const imdata = this._findInObject(pict, 'v:imagedata');
+          if (imdata && imdata.$ && imdata.$['r:id']) {
+            imageIds.push(imdata.$['r:id']);
+          }
+        });
+      }
+      
+      for (const key in node) {
+        if (typeof node[key] === 'object' && key !== '$') {
+          walk(node[key]);
+        }
+      }
+    };
+
+    walk(p);
+    return imageIds;
+  }
+
+  _findInObject(obj, keyToFind) {
+    if (!obj || typeof obj !== 'object') return null;
+    if (obj[keyToFind]) return obj[keyToFind];
+    for (const key in obj) {
+      if (typeof obj[key] === 'object' && key !== '$') {
+        const found = this._findInObject(obj[key], keyToFind);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  async _processImagesWithOCR() {
+    const totalP = this.paragraphs.length;
+    
+    // ESTRATEGIA "FRANCOTIRADOR": Solo buscamos en el inicio y en el final (Anexos)
+    // donde el usuario nos indica que están las 4 actas críticas.
+    const paragraphsToScan = this.paragraphs.filter(p => {
+      const hasImages = p.images && p.images.length > 0;
+      const isAtStart = p.index < 150; // Primeras ~20-30 páginas
+      const isAtEnd = p.index > (totalP - 200); // Anexos finales
+      return hasImages && (isAtStart || isAtEnd);
     });
+
+    const maxOCRBlocks = 8; // Suficiente para las 4 actas clave
+    let blocksDone = 0;
+
+    console.log(`DocxParser: Iniciando Sniper-OCR en extremos (Páginas iniciales y Anexos). Bloques detectados: ${paragraphsToScan.length}`);
+
+    for (const p of paragraphsToScan) {
+      if (blocksDone >= maxOCRBlocks) break;
+
+      for (const relId of p.images) {
+        if (blocksDone >= maxOCRBlocks) break;
+
+        const target = this.relsMap[relId];
+        if (!target) continue;
+        
+        const zipPath = target.startsWith('media/') ? `word/${target}` : target;
+        const imgFile = this.zip.file(zipPath);
+        
+        if (imgFile) {
+          const imgBuffer = await imgFile.async('nodebuffer');
+          
+          // Filtro por peso (Imágenes de actas suelen pesar entre 100KB y 4MB)
+          if (imgBuffer.length < 80000 || imgBuffer.length > 6000000) continue; 
+
+          console.log(`OCR Sniper: Escaneando acta potencial ${blocksDone + 1}/${maxOCRBlocks} (Pos: ${p.index < 150 ? 'Inicio' : 'Anexos'})...`);
+          
+          if (ocrEngine && typeof ocrEngine.recognize === 'function') {
+            const ocrText = await ocrEngine.recognize(imgBuffer);
+            if (ocrText && ocrText.trim()) {
+              p.text += "\n[OCR DETECTED TEXT]: " + ocrText;
+              if (p.normText !== undefined) {
+                p.normText += ocrText.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, '');
+              }
+              p.ocrText = ocrText;
+              blocksDone++;
+            }
+          }
+        }
+      }
+    }
+    console.log(`DocxParser: Sniper-OCR Finalizado. Actas procesadas: ${blocksDone}.`);
   }
 
   _extractRuns(paragraph, paragraphStyleId) {
-    if (!paragraph['w:r']) return [];
-    const runElements = Array.isArray(paragraph['w:r']) ? paragraph['w:r'] : [paragraph['w:r']];
-
-    return runElements.map(run => {
-      const textContent = extractTextFromNode(run['w:t']);
-      const explicitProps = getRunProperties(run);
+    const runs = [];
+    
+    // Función recursiva para extraer texto de runs, capturando w:t, w:tab, w:br y w:sym
+    const walkRun = (node) => {
+      if (!node || typeof node !== 'object') return;
       
-      // Resolve with style inheritance
-      const resolvedProps = this._resolveRunProperties(explicitProps, paragraphStyleId);
+      if (node['w:r']) {
+        const runElements = Array.isArray(node['w:r']) ? node['w:r'] : [node['w:r']];
+        runElements.forEach(run => {
+          // Extraemos el texto del run de forma robusta
+          let textContent = '';
+          const walkText = (tNode, key) => {
+            if (key === 'w:t') textContent += extractTextFromNode(tNode);
+            else if (key === 'w:tab' || key === 'w:br' || key === 'w:sym') textContent += ' ';
+            else if (typeof tNode === 'object') {
+              for (const k in tNode) {
+                if (k === '$') continue;
+                const child = tNode[k];
+                if (Array.isArray(child)) child.forEach(c => walkText(c, k));
+                else walkText(child, k);
+              }
+            }
+          };
+          walkText(run, 'w:r');
 
-      return {
-        text: textContent,
-        properties: resolvedProps,
-        raw: run
-      };
-    });
+          const explicitProps = getRunProperties(run);
+          const resolvedProps = this._resolveRunProperties(explicitProps, paragraphStyleId);
+
+          runs.push({
+            text: textContent,
+            properties: resolvedProps,
+            raw: run
+          });
+        });
+      }
+      
+      // Seguimos buscando runs en elementos anidados (como w:hyperlink o w:sdt)
+      for (const key in node) {
+        if (key === '$' || key === 'w:r' || key === 'w:pPr' || key === 'w:rPr') continue;
+        const child = node[key];
+        if (Array.isArray(child)) child.forEach(c => walkRun(c));
+        else walkRun(child);
+      }
+    };
+
+    walkRun(paragraph);
+    return runs;
   }
 
   /**

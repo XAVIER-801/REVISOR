@@ -1,5 +1,6 @@
 /**
- * Motor de Reglas VRI-SCANNER 2.0 Elite - UNAP 2025
+ * Motor de Reglas RepoStyle 2.0 - Auditor de Formato Premium
+ * Optimizado para Tesis de Alta Complejidad
  */
 class RuleEngine {
   constructor(parsedDoc) {
@@ -13,27 +14,36 @@ class RuleEngine {
       warnings: 0,
       score: 100
     };
+    // Pre-normalizar texto para ganar velocidad extrema y robustez
+    this.paragraphs.forEach(p => {
+      p.normText = (p.text || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, '');
+    });
   }
 
   analizar() {
-    this.verificarMargenes();
-    this.verificarFuentePredeterminada();
-    this.verificarEstructura();
-    this.verificarFormatoPortada();
-    this.verificarReporteSimilitud();
-    this.verificarFormatoHojaJurados();
-    this.verificarFormatoDedicatoria();
-    this.verificarFormatoAgradecimientos();
-    this.verificarFormatoIndiceGeneral();
-    this.verificarResumen();
-    this.verificarAbstract();
-    this.verificarNumeracionPaginas();
-    this.verificarIndiceTablas();
-    this.verificarIndiceFiguras();
-    this.verificarIndiceAnexos();
-    this.verificarAcronimos();
-    this.verificarEstructuraCapitulos();
-    this.verificarAnexos();
+    const v = [
+      'verificarMargenes', 'verificarFuentePredeterminada', 'verificarEstructura',
+      'verificarFormatoPortada', 'verificarReporteSimilitud', 'verificarFormatoHojaJurados',
+      'verificarFormatoDedicatoria', 'verificarFormatoAgradecimientos', 'verificarFormatoIndiceGeneral',
+      'verificarResumen', 'verificarAbstract', 'verificarNumeracionPaginas',
+      'verificarIndiceTablas', 'verificarIndiceFiguras', 'verificarIndiceAnexos',
+      'verificarAcronimos', 'verificarEstructuraCapitulos', 'verificarAnexos'
+    ];
+
+    v.forEach(m => {
+      try {
+        if (typeof this[m] === 'function') this[m]();
+      } catch (e) {
+        console.error(`RuleEngine: Error en ${m}:`, e.message);
+        this.agregarResultado({
+          category: '⚠️ Sistema',
+          rule: `Error en análisis de ${m}`,
+          status: 'warning',
+          message: 'No se pudo completar esta verificación específica debido a un formato inesperado.'
+        });
+      }
+    });
+
     this.calcularPuntaje();
     return {
       results: this.results,
@@ -94,21 +104,34 @@ class RuleEngine {
       { id: 'indice', nombre: 'ÍNDICE GENERAL', palabrasClave: ['ÍNDICE GENERAL', 'CONTENIDO'], requerida: true },
       { id: 'resumen', nombre: 'RESUMEN', palabrasClave: ['RESUMEN'], requerida: true },
       { id: 'abstract', nombre: 'ABSTRACT', palabrasClave: ['ABSTRACT'], requerida: true },
-      { id: 'intro', nombre: 'INTRODUCCIÓN', palabrasClave: ['INTRODUCCIÓN'], requerida: true }
+      { id: 'intro', nombre: 'INTRODUCCIÓN', palabrasClave: ['INTRODUCCIÓN'], requerida: true },
+      { id: 'declaracion', nombre: 'DECLARACIÓN JURADA', palabrasClave: ['DECLARACION JURADA DE AUTENTICIDAD', 'DECLARA BAJO JURAMENTO'], requerida: true },
+      { id: 'autorizacion', nombre: 'AUTORIZACIÓN DE DEPÓSITO', palabrasClave: ['AUTORIZACION PARA EL DEPOSITO', 'REPOSITORIO INSTITUCIONAL'], requerida: true }
     ];
 
     secciones.forEach(seccion => {
       let foundIdx = this.paragraphs.findIndex(p => {
-        const textoLimpio = p.text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const textoLimpio = p.normText;
         return seccion.palabrasClave.some(k => {
           const normK = k.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, '');
           return textoLimpio.includes(normK) || (normK.length > 10 && textoLimpio.includes(normK.substring(0, 10)));
         });
       });
 
-      if (foundIdx === -1 && (seccion.id === 'jury' || seccion.id === 'similitud')) {
-        const imagePage = this.paragraphs.find(p => p.page >= 2 && p.page <= 5 && p.isImagePage);
+      if (foundIdx === -1 && (seccion.id === 'jury' || seccion.id === 'similitud' || seccion.id === 'declaracion' || seccion.id === 'autorizacion')) {
+        const imagePage = this.paragraphs.find(p => p.page >= 2 && p.isImagePage);
         if (imagePage) foundIdx = this.paragraphs.indexOf(imagePage);
+
+        // Also check if any paragraph has [OCR DETECTED TEXT] and contains keywords
+        const ocrPara = this.paragraphs.find(p => {
+          if (!p.text.includes('[OCR DETECTED TEXT]')) return false;
+          const textoLimpio = p.text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+          return seccion.palabrasClave.some(k => {
+            const normK = k.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+            return textoLimpio.includes(normK);
+          });
+        });
+        if (ocrPara) foundIdx = this.paragraphs.indexOf(ocrPara);
       }
 
       const isFound = foundIdx !== -1;
@@ -571,41 +594,30 @@ class RuleEngine {
     });
   }
 
+  // MOTOR DE RESUMEN GREEDY (Capture-Fidelity-Matched)
   verificarResumen() {
-    const resIdx = this.paragraphs.findIndex(p => p.text.toUpperCase().includes('RESUMEN'));
-    if (resIdx === -1) return;
-
-    let textoContenido = "";
-    let keywordsLine = "";
-    let kIdx = -1;
-
-    for (let i = resIdx + 1; i < resIdx + 15 && i < this.paragraphs.length; i++) {
-      const p = this.paragraphs[i];
-      if (p.text.toLowerCase().includes('palabras clave:')) {
-        keywordsLine = p.text;
-        kIdx = i;
-        break;
-      }
-      textoContenido += p.text + " ";
+    const kIdx = this.paragraphs.findIndex(p => p.normText.includes('PALABRASCLAVE'));
+    
+    if (kIdx === -1) {
+      const resIdx = this.paragraphs.findIndex(p => p.normText.endsWith('RESUMEN') && p.text.length < 60);
+      if (resIdx === -1) return;
+      this._procesarConteoResumen(resIdx, resIdx + 50, true, 'res-length', '📝 Resumen', 'Cantidad de palabras', '200-300 palabras');
+      return;
     }
 
-    const conteoPalabras = textoContenido.split(/\s+/).filter(w => w.length > 0).length;
-    this.agregarResultado({
-      id: 'res-length',
-      category: '📝 Resumen',
-      rule: 'Cantidad de palabras',
-      status: (conteoPalabras >= 250 && conteoPalabras <= 300) ? 'passed' : 'warning',
-      message: `El resumen tiene ${conteoPalabras} palabras, debe tener entre 250 y 300.`,
-      expected: '250-300 palabras',
-      actual: `${conteoPalabras} palabras`,
-      paragraphIndex: resIdx
-    });
+    let startIdx = -1;
+    for (let i = kIdx; i >= 0 && i > kIdx - 100; i--) {
+      if (this.paragraphs[i].normText.endsWith('RESUMEN') && this.paragraphs[i].text.length < 60) {
+        startIdx = i;
+        break;
+      }
+    }
 
-    if (kIdx !== -1) {
-      const esNegrita = this.paragraphs[kIdx].runs?.some(r => {
-        const t = r.text.toLowerCase();
-        return (t.includes('palabras clave') || t.includes('keywords')) && r.properties?.bold;
-      }) || false;
+    if (startIdx !== -1) {
+      this._procesarConteoResumen(startIdx, kIdx, false, 'res-length', '📝 Resumen', 'Cantidad de palabras', '200-300 palabras');
+      
+      const pK = this.paragraphs[kIdx];
+      const esNegrita = pK.runs?.some(r => r.text.toLowerCase().includes('palabras clave') && r.properties?.bold);
       this.agregarResultado({
         id: 'res-bold',
         category: '📝 Resumen',
@@ -620,22 +632,20 @@ class RuleEngine {
   }
 
   verificarAbstract() {
-    const absIdx = this.paragraphs.findIndex(p => p.text.toUpperCase().includes('ABSTRACT'));
-    if (absIdx === -1) return;
+    const kIdx = this.paragraphs.findIndex(p => p.normText.includes('KEYWORDS'));
+    if (kIdx === -1) return;
 
-    let keywordsLine = "";
-    let kIdx = -1;
-
-    for (let i = absIdx + 1; i < absIdx + 15 && i < this.paragraphs.length; i++) {
-      const p = this.paragraphs[i];
-      if (p.text.toLowerCase().includes('keywords:')) {
-        keywordsLine = p.text;
-        kIdx = i;
+    let startIdx = -1;
+    for (let i = kIdx; i >= 0 && i > kIdx - 100; i--) {
+      if (this.paragraphs[i].normText.endsWith('ABSTRACT') && this.paragraphs[i].text.length < 60) {
+        startIdx = i;
         break;
       }
     }
 
-    if (kIdx !== -1) {
+    if (startIdx !== -1) {
+      this._procesarConteoResumen(startIdx, kIdx, false, 'abs-length', '📝 Resumen', 'Cantidad de palabras (Abstract)', '200-300 words');
+
       const esNegrita = this.paragraphs[kIdx].runs?.some(r => r.text.toLowerCase().includes('keywords:') && r.properties?.bold);
       this.agregarResultado({
         id: 'abs-bold',
@@ -648,6 +658,42 @@ class RuleEngine {
         paragraphIndex: kIdx
       });
     }
+  }
+
+  _procesarConteoResumen(startIdx, endIdx, isFallback, id, category, rule, expected) {
+    let textoTotal = "";
+
+    for (let i = startIdx; i <= endIdx; i++) {
+      let pText = this.paragraphs[i].text;
+      if (i === startIdx) {
+        const resMatch = pText.match(/(RESUMEN|ABSTRACT)/i);
+        if (resMatch) pText = pText.substring(resMatch.index + resMatch[0].length);
+      }
+      if (i === endIdx && !isFallback) {
+        const keyMatch = pText.match(/(Palabras\s+Clave|Keywords)/i);
+        if (keyMatch) pText = pText.substring(0, keyMatch.index);
+      }
+      textoTotal += pText + " ";
+    }
+
+    const normalizedText = textoTotal
+      .replace(/[\u00A0\u1680\u180E\u2000-\u200B\u202F\u205F\u3000\ufeff]/g, ' ')
+      .replace(/[\r\n\t]/g, ' ')
+      .trim();
+
+    const words = normalizedText.split(/\s+/).filter(w => w.length > 0);
+    const conteoPalabras = words.length;
+
+    this.agregarResultado({
+      id: id,
+      category: category,
+      rule: rule,
+      status: (conteoPalabras >= 200 && conteoPalabras <= 300) ? 'passed' : 'warning',
+      message: `El bloque tiene ${conteoPalabras} palabras. (Fidelity-Matched Word Count).`,
+      expected: expected,
+      actual: `${conteoPalabras} palabras`,
+      paragraphIndex: startIdx
+    });
   }
 
   verificarInterlineado() {
@@ -1679,7 +1725,7 @@ class RuleEngine {
         paragraphIndex: -1
       });
     }
-    
+
     // Integración lógica de los Capítulos Finales (V, VI, VII)
     this.verificarConclusiones();
     this.verificarRecomendaciones();
@@ -1908,7 +1954,7 @@ class RuleEngine {
     for (let i = refIdx + 1; i < this.paragraphs.length; i++) {
       const p = this.paragraphs[i];
       const text = p.text.trim();
-      
+
       if (text.length === 0) continue;
       // Romper si empieza la sección de Anexos
       if (/^ANEXOS/i.test(text) || /^[IVXLCDM]+\.\s+ANEXOS/i.test(text)) break;
@@ -1916,9 +1962,9 @@ class RuleEngine {
       referenciasCount++;
       const pTamano = p.runs?.[0]?.properties?.fontSize || 0;
       const pJustificado = p.properties?.alignment === 'both' || p.properties?.alignment === 'justify';
-      
+
       // La regla exige "sin negrita" a nivel general.
-      const pEsNegrita = p.runs?.find(r => r.text?.trim().length > 0)?.properties?.bold === true; 
+      const pEsNegrita = p.runs?.find(r => r.text?.trim().length > 0)?.properties?.bold === true;
 
       const leftIndent = p.properties?.indent || 0;
       const hangingIndent = p.properties?.hangingIndent || 0;
@@ -1926,7 +1972,7 @@ class RuleEngine {
       // APA/Vancouver/IEEE exigen 1.25cm de sangría francesa (aprox 708 twips)
       const hangOk = hangingIndent > 600 && hangingIndent < 850;
       const leftOk = leftIndent < 100;
-      
+
       if (pTamano >= 23 && pTamano <= 25 && pJustificado && !pEsNegrita && hangOk && leftOk) {
         referenciasOk++;
       }
@@ -1973,12 +2019,12 @@ class RuleEngine {
     const tamano = pTitle.runs?.[0]?.properties?.fontSize || 0;
     const esNegrita = pTitle.runs?.find(r => r.text?.trim().length > 0)?.properties?.bold === true;
     const esCentrado = pTitle.properties?.alignment === 'center';
-    
+
     const titleOk = tamano >= 31 && tamano <= 33 && esNegrita && esCentrado;
 
     let anexosDetectados = 0;
     let anexosFormatoOk = 0;
-    
+
     // Flags para documentos obligatorios (que suelen estar escaneados)
     let tieneDeclaracionJurada = false;
     let tieneAutorizacionDeposito = false;
@@ -1986,7 +2032,7 @@ class RuleEngine {
     for (let i = anexosIdx + 1; i < this.paragraphs.length; i++) {
       const p = this.paragraphs[i];
       const text = p.text.trim();
-      
+
       if (text.length === 0) continue;
 
       // Buscar menciones de documentos obligatorios en texto plano
@@ -1999,11 +2045,11 @@ class RuleEngine {
         anexosDetectados++;
         const pTamano = p.runs?.[0]?.properties?.fontSize || 0;
         const isLeftAligned = p.properties?.alignment === 'left' || (!p.properties?.alignment);
-        
+
         // La regla pide que "Anexo X." sea Negrita, pero el título a continuación sea Normal
         // Como esto es mixto en un solo párrafo, verificaremos las reglas generales del contenedor
         const leftIndent = p.properties?.indent || 0;
-        
+
         if (pTamano >= 23 && pTamano <= 25 && isLeftAligned && leftIndent < 100) {
           anexosFormatoOk++;
         }
@@ -2023,12 +2069,12 @@ class RuleEngine {
 
     // Módulo robusto de detección de documentos escaneados
     const docsEncontrados = (tieneDeclaracionJurada ? 1 : 0) + (tieneAutorizacionDeposito ? 1 : 0);
-    
+
     let docsMessage = '';
     if (docsEncontrados === 2) {
-       docsMessage = 'Ambos documentos legales fueron detectados en texto plano.';
+      docsMessage = 'Ambos documentos legales fueron detectados en texto plano.';
     } else {
-       docsMessage = 'ALERTA DE OCR: No se encontró texto plano de la Declaración Jurada o Autorización. Si están insertados como imagen (escáner), requieren Validación OCR / Revisión Manual.';
+      docsMessage = 'ALERTA DE OCR: No se encontró texto plano de la Declaración Jurada o Autorización. Si están insertados como imagen (escáner), requieren Validación OCR / Revisión Manual.';
     }
 
     this.agregarResultado({
@@ -2057,4 +2103,3 @@ class RuleEngine {
 }
 
 export default RuleEngine;
-

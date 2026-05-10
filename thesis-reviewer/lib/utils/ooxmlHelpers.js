@@ -1,31 +1,25 @@
-/**
- * OOXML Helper utilities for reading and manipulating Word document XML
- * A .docx file is a ZIP containing XML files. The main content is in word/document.xml
- */
-
-// Conversion constants
-const TWIPS_PER_CM = 567;
-const HALF_POINTS_PER_POINT = 2;
-const EMU_PER_CM = 360000;
+export const TWIPS_PER_CM = 567;
+export const HALF_POINTS_PER_POINT = 2;
+export const EMU_PER_CM = 360000;
 
 /**
  * Convert twips to centimeters
  */
-function twipsToCm(twips) {
+export function twipsToCm(twips) {
   return Math.round((twips / TWIPS_PER_CM) * 100) / 100;
 }
 
 /**
  * Convert centimeters to twips
  */
-function cmToTwips(cm) {
+export function cmToTwips(cm) {
   return Math.round(cm * TWIPS_PER_CM);
 }
 
 /**
  * Convert half-points to points (font sizes in OOXML are stored as half-points)
  */
-function halfPointsToPoints(hp) {
+export function halfPointsToPoints(hp) {
   return hp / HALF_POINTS_PER_POINT;
 }
 
@@ -33,7 +27,7 @@ function halfPointsToPoints(hp) {
  * Convert line spacing value to display string
  * In OOXML, line spacing 240 = single (1.0), 360 = 1.5, 480 = double (2.0)
  */
-function lineSpacingToDisplay(value) {
+export function lineSpacingToDisplay(value) {
   if (!value) return 'unknown';
   const num = parseInt(value);
   if (num === 240) return '1.0';
@@ -49,7 +43,7 @@ function lineSpacingToDisplay(value) {
  * - array of mixed: ["hello", { _: " world" }]
  * - empty object: {} (no text)
  */
-function extractTextFromNode(t) {
+export function extractTextFromNode(t) {
   if (!t) return '';
   if (typeof t === 'string') return t;
   if (typeof t === 'number') return t.toString();
@@ -65,15 +59,46 @@ function extractTextFromNode(t) {
 }
 
 /**
- * Get text content from a paragraph element
+ * Get text content from a paragraph element recursively.
+ * This is CRITICAL for capturing text inside hyperlinks, smart tags, 
+ * SDTs (Structured Document Tags), and other nested OOXML elements.
  */
-function getParagraphText(paragraph) {
-  if (!paragraph || !paragraph['w:r']) return '';
-  const runs = Array.isArray(paragraph['w:r']) ? paragraph['w:r'] : [paragraph['w:r']];
-  return runs.map(run => {
-    if (!run['w:t']) return '';
-    return extractTextFromNode(run['w:t']);
-  }).join('');
+export function getParagraphText(paragraph) {
+  if (!paragraph) return '';
+  
+  let text = '';
+  
+  const walk = (node, nodeKey) => {
+    if (!node) return;
+    
+    // If it's a w:t (text node), extract it
+    if (nodeKey === 'w:t') {
+      text += extractTextFromNode(node);
+      return;
+    }
+    
+    // Handle w:tab, w:br and w:sym as separators or characters
+    if (nodeKey === 'w:tab' || nodeKey === 'w:br' || nodeKey === 'w:sym') {
+      text += ' ';
+      return;
+    }
+    
+    // If it's an object, walk its children
+    if (typeof node === 'object') {
+      for (const key in node) {
+        if (key === '$') continue; // Skip attributes
+        const child = node[key];
+        if (Array.isArray(child)) {
+          child.forEach(c => walk(c, key));
+        } else {
+          walk(child, key);
+        }
+      }
+    }
+  };
+
+  walk(paragraph, 'w:p');
+  return text;
 }
 
 /**
@@ -81,7 +106,7 @@ function getParagraphText(paragraph) {
  * CRITICAL: Property names are mapped to match exactly what ruleEngine.js expects:
  *   alignment, indent, hangingIndent, firstLineIndent, lineSpacing, etc.
  */
-function getParagraphProperties(paragraph) {
+export function getParagraphProperties(paragraph) {
   const pPr = paragraph['w:pPr'] ? (Array.isArray(paragraph['w:pPr']) ? paragraph['w:pPr'][0] : paragraph['w:pPr']) : null;
   if (!pPr) return {};
 
@@ -140,7 +165,7 @@ function getParagraphProperties(paragraph) {
 /**
  * Get run (text) properties
  */
-function getRunProperties(run) {
+export function getRunProperties(run) {
   const rPr = run['w:rPr'] ? (Array.isArray(run['w:rPr']) ? run['w:rPr'][0] : run['w:rPr']) : null;
   if (!rPr) return {};
 
@@ -215,7 +240,7 @@ function getRunProperties(run) {
  * CRITICAL: Returns a `margins` object with `left`, `right`, `top`, `bottom`
  * keys to match what ruleEngine.js expects.
  */
-function getSectionProperties(body) {
+export function getSectionProperties(body) {
   const sectPr = body['w:sectPr'] ? (Array.isArray(body['w:sectPr']) ? body['w:sectPr'][0] : body['w:sectPr']) : null;
   if (!sectPr) return {};
 
@@ -254,7 +279,7 @@ function getSectionProperties(body) {
 /**
  * Get default run properties from styles.xml
  */
-function getDefaultRunProps(stylesXml) {
+export function getDefaultRunProps(stylesXml) {
   if (!stylesXml || !stylesXml['w:styles']) return {};
   const styles = stylesXml['w:styles'];
   const docDefaults = styles['w:docDefaults'];
@@ -271,18 +296,3 @@ function getDefaultRunProps(stylesXml) {
   const rp = Array.isArray(rPr) ? rPr[0] : rPr;
   return getRunProperties({ 'w:rPr': rp });
 }
-
-module.exports = {
-  twipsToCm,
-  cmToTwips,
-  halfPointsToPoints,
-  lineSpacingToDisplay,
-  getParagraphText,
-  getParagraphProperties,
-  getRunProperties,
-  getSectionProperties,
-  getDefaultRunProps,
-  TWIPS_PER_CM,
-  HALF_POINTS_PER_POINT,
-  EMU_PER_CM
-};

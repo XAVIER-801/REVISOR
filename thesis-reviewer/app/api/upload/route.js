@@ -9,12 +9,6 @@ import DocxAnnotator from '../../../lib/engine/docxAnnotator';
 import PdfParser from '../../../lib/engine/pdfParser';
 import PdfAnnotator from '../../../lib/engine/pdfAnnotator';
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
 export async function POST(request) {
   try {
     const formData = await request.formData();
@@ -40,15 +34,17 @@ export async function POST(request) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // 1. Parse the document
+    // 1. Parse the document with timeout protection
     let parsedDoc;
-    if (isDocx) {
-      const parser = new DocxParser(buffer);
-      parsedDoc = await parser.parse();
-    } else {
-      const parser = new PdfParser(buffer);
-      parsedDoc = await parser.parse();
-    }
+    const parsePromise = isDocx 
+      ? new DocxParser(buffer).parse() 
+      : new PdfParser(buffer).parse();
+
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Procesamiento demasiado largo (3 min).')), 180000)
+    );
+
+    parsedDoc = await Promise.race([parsePromise, timeoutPromise]);
 
     // 2. Run the rule engine
     const engine = new RuleEngine(parsedDoc);

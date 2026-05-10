@@ -1,4 +1,4 @@
-const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 /**
  * PDF Annotator Elite 2.0 - Total visual compliance report.
@@ -33,7 +33,7 @@ class PdfAnnotator {
         color: rgb(0.06, 0.45, 0.35)
       });
 
-      summaryPage.drawText(`VRI-SCANNER: REPORTE DE CUMPLIMIENTO (PAG. ${i + 1})`, {
+      summaryPage.drawText(`REPOSTYLE: REPORTE DE CUMPLIMIENTO (PAG. ${i + 1})`, {
         x: 50, y: height - 50, size: 20, font: fontBold, color: rgb(1, 1, 1)
       });
       
@@ -66,7 +66,7 @@ class PdfAnnotator {
         currentY -= 15;
       });
 
-      summaryPage.drawText(`Generado por VRI-SCANNER UNA Puno - 2025.`, { x: width / 2 - 100, y: 30, size: 7, font: fontRegular, color: rgb(0.6, 0.6, 0.6) });
+      summaryPage.drawText(`Generado por RepoStyle - Auditor de Formato y Estilo.`, { x: width / 2 - 100, y: 30, size: 7, font: fontRegular, color: rgb(0.6, 0.6, 0.6) });
     }
 
     // 2. SPATIAL ANNOTATIONS ON PAGES

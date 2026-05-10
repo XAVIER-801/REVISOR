@@ -4,382 +4,326 @@ import { useState, useCallback } from 'react';
 import { 
   Upload, FileText, CheckCircle, AlertCircle, XCircle, 
   RotateCcw, Download, Layout, Type, AlignLeft, 
-  BookOpen, ChevronRight, GraduationCap, BarChart3
+  BookOpen, ChevronRight, GraduationCap, BarChart3,
+  ArrowRight, ShieldCheck, Zap, Globe, File, Eye, X, ExternalLink, Cpu, Activity, TrendingUp, MousePointer2
 } from 'lucide-react';
 
 export default function Home() {
   const [file, setFile] = useState(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [progressText, setProgressText] = useState('');
   const [results, setResults] = useState(null);
   const [annotatedBase64, setAnnotatedBase64] = useState(null);
   const [annotatedFileName, setAnnotatedFileName] = useState('');
   const [error, setError] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [showPreview, setShowPreview] = useState(false);
 
-  const handleDragOver = useCallback((e) => {
-    e.preventDefault();
-    setDragOver(true);
-  }, []);
+  const pdfUrl = "https://repositorio.unap.edu.pe/server/api/core/bitstreams/ed595449-d1f1-4bcf-880b-1f9d767f4222/content";
 
-  const handleDragLeave = useCallback((e) => {
-    e.preventDefault();
-    setDragOver(false);
-  }, []);
+  const uploadFile = async (fileToUpload) => {
+    if (!fileToUpload) return;
+    setUploading(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', fileToUpload);
+      const response = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Error al procesar');
+      setResults(data.results);
+      setAnnotatedBase64(data.annotatedBase64);
+      setAnnotatedFileName(data.annotatedFileName);
+      setUploading(false);
+    } catch (err) {
+      setError(err.message);
+      setUploading(false);
+    }
+  };
 
   const handleDrop = useCallback((e) => {
     e.preventDefault();
     setDragOver(false);
     const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile && (droppedFile.name.toLowerCase().endsWith('.docx') || droppedFile.name.toLowerCase().endsWith('.pdf'))) {
+    if (droppedFile) {
       setFile(droppedFile);
       uploadFile(droppedFile);
-    } else {
-      setError('Solo se aceptan archivos .docx (Word) o .pdf');
     }
   }, []);
-
-  const handleFileSelect = useCallback((e) => {
-    const selectedFile = e.target.files[0];
-    if (selectedFile) {
-      setFile(selectedFile);
-      uploadFile(selectedFile);
-    }
-  }, []);
-
-  const uploadFile = async (fileToUpload) => {
-    setUploading(true);
-    setError(null);
-    setProgress(10);
-    setProgressText('Subiendo archivo...');
-
-    try {
-      const formData = new FormData();
-      formData.append('file', fileToUpload);
-
-      setProgress(30);
-      setProgressText('Analizando estructura del documento...');
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      setProgress(70);
-      setProgressText('Verificando reglas de formato UNAP 2025...');
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Error al procesar el documento');
-      }
-
-      setResults(data.results);
-      setAnnotatedBase64(data.annotatedBase64);
-      setAnnotatedFileName(data.annotatedFileName);
-
-      setProgress(100);
-      setProgressText('¡Análisis completado!');
-
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setUploading(false);
-
-    } catch (err) {
-      setError(err.message);
-      setUploading(false);
-      setProgress(0);
-    }
-  };
 
   const handleDownload = () => {
     if (!annotatedBase64) return;
     const byteCharacters = atob(annotatedBase64);
     const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
+    for (let i = 0; i < byteCharacters.length; i++) byteNumbers[i] = byteCharacters.charCodeAt(i);
     const byteArray = new Uint8Array(byteNumbers);
-    const isPdf = annotatedFileName.toLowerCase().endsWith('.pdf');
-    const blob = new Blob([byteArray], { type: isPdf ? 'application/pdf' : 'application/octet-stream' });
+    const blob = new Blob([byteArray], { type: 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = annotatedFileName || (isPdf ? 'tesis_revisada.pdf' : 'tesis_revisada.docx');
-    document.body.appendChild(a);
+    a.download = annotatedFileName || 'tesis_auditada.docx';
     a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
   };
 
-  const handleReset = () => {
-    setFile(null);
-    setResults(null);
-    setAnnotatedBase64(null);
-    setAnnotatedFileName('');
-    setError(null);
-    setProgress(0);
-    setUploading(false);
-    setActiveFilter('all');
-  };
-
-  const getFilteredResults = () => {
-    if (!results) return [];
-    let items = results.results || [];
-    if (activeFilter === 'errors') return items.filter(r => r.status === 'error');
-    if (activeFilter === 'warnings') return items.filter(r => r.status === 'warning');
-    if (activeFilter === 'passed') return items.filter(r => r.status === 'passed');
-    return items;
-  };
-
-  const groupByCategory = (items) => {
-    return items.reduce((groups, item) => {
-      const cat = item.category;
-      if (!groups[cat]) groups[groups.findIndex?.(g => g.name === cat) || -1] ? null : groups[cat] = [];
-      groups[cat].push(item);
-      return groups;
-    }, {});
-  };
-
-  // ===== RENDER: UPLOAD =====
   if (!results && !uploading) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center p-6 sm:p-24">
-        <div className="w-full max-w-4xl space-y-12 text-center">
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full glass text-emerald-400 text-sm font-semibold mb-4">
-              <GraduationCap size={16} />
-              UNAP VRI-SCANNER 2.0
-            </div>
-            <h1 className="text-5xl sm:text-7xl font-bold tracking-tight">
-              Valida tu <span className="text-emerald-500">Tesis</span><br />
-              en segundos.
-            </h1>
-            <p className="text-xl text-slate-400 max-w-2xl mx-auto">
-              Optimizado para la nueva <span className="text-emerald-400 font-semibold">Guía de Formato 2025</span>. 
-              Soporte completo para Microsoft Word y PDF.
-            </p>
+      <main className="container-crypto animate-reveal" style={{ paddingTop: '6rem', paddingBottom: '6rem' }}>
+        {/* HERO SECTION - PERFECTLY CENTERED */}
+        <section style={{ textAlign: 'center', marginBottom: '8rem' }}>
+          <div className="animate-float" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.75rem', background: 'rgba(69, 245, 229, 0.08)', padding: '0.7rem 1.75rem', borderRadius: '50px', marginBottom: '3.5rem', border: '1px solid rgba(69, 245, 229, 0.2)' }}>
+             <Activity size={18} className="text-accent" />
+             <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#45F5E5', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Auditoría Digital Sincronizada UNAP</span>
           </div>
-
-          <div
-            className={`glass p-12 cursor-pointer border-2 border-dashed transition-all duration-300 relative overflow-hidden group
-              ${dragOver ? 'border-emerald-500 bg-emerald-500/10 scale-[1.02]' : 'border-slate-700 hover:border-emerald-500/50 hover:bg-slate-800/30'}`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => document.getElementById('file-input').click()}
-          >
-            <div className="relative z-10 space-y-6">
-              <div className="w-20 h-20 bg-emerald-500/10 rounded-2xl flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
-                <Upload className="text-emerald-500" size={40} />
-              </div>
-              <div className="space-y-2">
-                <h3 className="text-2xl font-bold text-white">Sube tu documento</h3>
-                <p className="text-slate-400">Arrastra y suelta o haz clic para explorar</p>
-              </div>
-              <div className="flex justify-center gap-3">
-                <span className="category-pill bg-slate-800 text-emerald-400 border border-emerald-500/30">.DOCX</span>
-                <span className="category-pill bg-slate-800 text-emerald-400 border border-emerald-500/30">.PDF</span>
-              </div>
-            </div>
-            <input id="file-input" type="file" accept=".docx,.pdf" onChange={handleFileSelect} className="hidden" />
+          
+          <h1 style={{ fontSize: '5.5rem', fontWeight: 900, letterSpacing: '-0.06em', lineHeight: '1', marginBottom: '2.5rem' }}>
+             Auditoría de <span className="text-gradient">Tesis.</span><br />
+             <span style={{ fontSize: '3.5rem', opacity: 0.9 }}>Pregrado & Posgrado.</span>
+          </h1>
+          
+          <p style={{ fontSize: '1.2rem', color: '#94A3B8', maxWidth: '850px', margin: '0 auto 5rem', fontWeight: 500, lineHeight: '1.8', opacity: 0.8 }}>
+             Validación técnica instantánea para Pregrado, Posgrado y Segundas Especialidades. <br />
+             Optimizado para el Repositorio Institucional UNAP.
+          </p>
+          
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '2rem' }}>
+             <button className="btn-crypto animate-glow" style={{ padding: '1.4rem 4rem', fontSize: '1.1rem' }} onClick={() => document.getElementById('file-input').click()}>
+                Subir Tesis <Upload size={24} />
+             </button>
+             <button className="btn-crypto" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', padding: '1.4rem 4rem', fontSize: '1.1rem' }} onClick={() => setShowPreview(true)}>
+                Normativa Oficial
+             </button>
           </div>
+          {/* Input oculto necesario para que funcione el botón de arriba */}
+          <input id="file-input" type="file" accept=".docx,.pdf" className="hidden-input" onChange={(e) => uploadFile(e.target.files[0])} />
+        </section>
 
-          {error && (
-            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-center gap-3 justify-center animate-shake">
-              <XCircle size={20} />
-              <span className="font-semibold">{error}</span>
-            </div>
-          )}
+        {/* ACADEMIC LEVELS - GRID */}
+        <section style={{ marginBottom: '8rem' }}>
+           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '2rem' }}>
+              {[
+                { title: "Pregrado", sub: "Tesis & Suficiencia", status: "Activo", color: "#45F5E5" },
+                { title: "Posgrado", sub: "Maestría & Doctorado", status: "Sincronizado", color: "#9D50FF" },
+                { title: "Especialidades", sub: "Segunda Especialidad", status: "Activo", color: "#3772FF" }
+              ].map((lvl, i) => (
+                <div key={i} className="academic-level-card" style={{ padding: '2rem' }}>
+                   <div className="flex flex-col gap-1">
+                      <span style={{ fontSize: '1.3rem', fontWeight: 900 }}>{lvl.title}</span>
+                      <span style={{ fontSize: '0.8rem', color: '#64748B', fontWeight: 700 }}>{lvl.sub}</span>
+                   </div>
+                   <span className="status-tag" style={{ color: lvl.color, borderColor: `${lvl.color}40`, background: `${lvl.color}10`, padding: '0.5rem 1.2rem', borderRadius: '50px', fontSize: '0.7rem', fontWeight: 900, border: '1px solid' }}>{lvl.status}</span>
+                </div>
+              ))}
+           </div>
+        </section>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-slate-500">
-            {[
-              { icon: Layout, text: "Márgenes 3.5cm" },
-              { icon: Type, text: "TNR 12 Ptos" },
-              { icon: BookOpen, text: "Estructura" },
-              { icon: AlignLeft, text: "APA 7 / Vanc" }
-            ].map((item, i) => (
-              <div key={i} className="flex items-center gap-2 justify-center">
-                <item.icon size={18} className="text-slate-700" />
-                <span className="text-sm font-medium">{item.text}</span>
-              </div>
-            ))}
+        {showPreview && (
+          <div className="modal-overlay animate-reveal" onClick={() => setShowPreview(false)} style={{ zIndex: 3000 }}>
+             <div className="modal-content card-elite" onClick={e => e.stopPropagation()} style={{ height: '90vh', maxWidth: '1200px', background: '#06080A', padding: 0 }}>
+                <div style={{ padding: '1.5rem 2.5rem', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                   <div className="flex items-center gap-4">
+                      <div className="ocr-pulse"></div>
+                      <h3 className="font-black text-sm uppercase tracking-widest text-slate-300">Normativa Institucional UNAP</h3>
+                   </div>
+                   <div className="flex items-center gap-4">
+                      <a href={pdfUrl} target="_blank" className="nav-link" style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                         <ExternalLink size={16} /> Abrir en nueva pestaña
+                      </a>
+                      <button onClick={() => setShowPreview(false)} className="p-2 text-slate-500 hover:text-white transition-all"><X size={32}/></button>
+                   </div>
+                </div>
+                {/* Fallback link if iframe fails */}
+                <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+                   <iframe src={pdfUrl} style={{ width: '100%', height: '100%', border: 'none' }}></iframe>
+                   <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: -1, textAlign: 'center' }}>
+                      <p className="text-slate-500">Cargando guía oficial...</p>
+                      <a href={pdfUrl} target="_blank" className="text-accent underline mt-2 block">Clic aquí si no carga automáticamente</a>
+                   </div>
+                </div>
+             </div>
           </div>
-        </div>
+        )}
+
+        {error && (
+          <div className="error-banner animate-reveal" style={{ marginTop: '2rem', background: 'rgba(255, 77, 77, 0.1)', border: '1px solid rgba(255, 77, 77, 0.2)', padding: '1.5rem', borderRadius: '16px', display: 'flex', alignItems: 'center', gap: '1rem', color: '#FF4D4D' }}>
+             <XCircle size={24} />
+             <div style={{ textAlign: 'left' }}>
+                <div style={{ fontWeight: 900, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.2rem' }}>Error de Procesamiento</div>
+                <div style={{ fontSize: '0.9rem', opacity: 0.8 }}>{error}</div>
+             </div>
+             <button onClick={() => setError(null)} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#FF4D4D', cursor: 'pointer' }}><X size={20}/></button>
+          </div>
+        )}
       </main>
     );
   }
 
-  // ===== RENDER: PROCESSING =====
   if (uploading) {
     return (
-      <main className="min-h-screen flex items-center justify-center p-6">
-        <div className="w-full max-w-md space-y-8 text-center glass p-8">
-          <div className="relative w-24 h-24 mx-auto">
-            <div className="absolute inset-0 border-4 border-slate-800 rounded-full"></div>
-            <div className="absolute inset-0 border-4 border-emerald-500 rounded-full border-t-transparent animate-spin"></div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <FileText className="text-emerald-500" size={32} />
+      <main className="container-crypto flex items-center justify-center py-40 animate-reveal">
+         <div className="card-elite max-w-lg w-full text-center py-24">
+            <div className="w-40 h-40 border-4 border-white/5 border-t-accent rounded-full animate-spin mx-auto mb-12 shadow-[0_0_60px_rgba(69,245,229,0.3)]"></div>
+            <h2 className="text-4xl font-black tracking-tighter">Analizando Bloque...</h2>
+            <div className="flex justify-center gap-3 mt-10">
+               <div className="ocr-pulse"></div>
+               <span className="text-xs font-bold text-accent uppercase tracking-[0.6em]">Neural OCR Active</span>
             </div>
-          </div>
-          <div className="space-y-4">
-            <h2 className="text-2xl font-bold">Escaneando Tesis...</h2>
-            <p className="text-slate-400 font-medium">{progressText}</p>
-            <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progress}%` }}></div>
-            </div>
-          </div>
-        </div>
-      </main>
+         </div>
+       </main>
     );
   }
 
-  // ===== RENDER: RESULTS =====
-  const filtered = getFilteredResults();
-  const grouped = groupByCategory(filtered);
-
-  return (
-    <main className="min-h-screen p-6 sm:p-12 lg:p-24 bg-slate-950">
-      <div className="max-w-6xl mx-auto space-y-12">
-        {/* Header Results */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div className="space-y-1">
-            <h1 className="text-3xl font-bold">Reporte de Validación</h1>
-            <p className="text-slate-400 flex items-center gap-2">
-              <FileText size={16} /> {file?.name}
-            </p>
-          </div>
-          <div className="flex gap-4">
-            <button onClick={handleDownload} className="btn-primary flex items-center gap-2">
-              <Download size={20} /> Descargar Revisado
-            </button>
-            <button onClick={handleReset} className="p-3 rounded-xl border border-slate-700 text-slate-400 hover:bg-slate-800 transition-colors">
-              <RotateCcw size={20} />
-            </button>
-          </div>
-        </div>
-
-        {/* Dashboard Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-4 glass p-8 flex flex-col items-center justify-center space-y-6">
-            <div className="score-radial" style={{ '--score': results.score }}>
-              <div className="score-content">
-                <span className="score-value">{results.score}</span>
-                <span className="score-label">Puntos</span>
-              </div>
-            </div>
-            <div className="text-center">
-              <h3 className="text-xl font-bold">Puntaje de Formato</h3>
-              <p className="text-slate-400 text-sm">Basado en la Guía de Tesis 2025</p>
-            </div>
-          </div>
-
-          <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-6">
-            {[
-              { label: "Aprobados", val: results.passedCount, icon: CheckCircle, color: "text-emerald-400", bg: "bg-emerald-500/10" },
-              { label: "Errores Críticos", val: results.errorCount, icon: XCircle, color: "text-red-400", bg: "bg-red-500/10" },
-              { label: "Advertencias", val: results.warningCount, icon: AlertCircle, color: "text-amber-400", bg: "bg-amber-500/10" }
-            ].map((stat, i) => (
-              <div key={i} className="glass p-6 space-y-4">
-                <div className={`w-12 h-12 ${stat.bg} rounded-xl flex items-center justify-center ${stat.color}`}>
-                  <stat.icon size={24} />
-                </div>
+  if (results) {
+    return (
+    <main className="animate-reveal" style={{ minHeight: '100vh', padding: '2rem 0' }}>
+       <div className="tech-grid"></div>
+       
+       <div className="container-crypto">
+          {/* HEADER PANEL */}
+          <div className="header-panel flex-between">
+             <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                <button onClick={() => setResults(null)} className="w-12 h-12 flex items-center justify-center bg-white/5 rounded-xl text-slate-400 hover:text-white border border-white/10 transition-all">
+                   <RotateCcw size={20} />
+                </button>
                 <div>
-                  <div className="text-3xl font-bold">{stat.val}</div>
-                  <div className="text-slate-400 text-sm font-medium">{stat.label}</div>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent)', fontSize: '0.65rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.3em', marginBottom: '0.4rem' }}>
+                      <Activity size={14} /> Auditoría Finalizada
+                   </div>
+                   <h2 style={{ fontSize: '1.8rem', fontWeight: 900, letterSpacing: '-0.04em' }}>
+                      {file?.name.length > 40 ? file?.name.substring(0, 40) + '...' : file?.name}
+                      <span style={{ marginLeft: '1rem', padding: '0.2rem 0.6rem', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', fontSize: '0.65rem', color: '#64748B', fontWeight: 800, border: '1px solid rgba(255,255,255,0.05)' }}>DOCX</span>
+                   </h2>
                 </div>
-              </div>
-            ))}
-            <div className="sm:col-span-3 glass p-6 flex items-center justify-between">
-               <div className="flex items-center gap-4">
-                 <div className="w-12 h-12 bg-blue-500/10 rounded-xl flex items-center justify-center text-blue-400">
-                   <BarChart3 size={24} />
-                 </div>
-                 <div>
-                   <div className="text-sm text-slate-400">Total de Reglas Analizadas</div>
-                   <div className="text-xl font-bold">{results.totalRules} criterios verificados</div>
-                 </div>
-               </div>
-               <ChevronRight className="text-slate-600" />
-            </div>
+             </div>
+             <button onClick={handleDownload} className="btn-crypto">
+                <Download size={20} /> Descargar Reporte Completo
+             </button>
           </div>
-        </div>
 
-        {/* Filters */}
-        <div className="flex flex-wrap gap-3">
-          {[
-            { id: 'all', label: 'Todas las Reglas' },
-            { id: 'errors', label: 'Errores Críticos' },
-            { id: 'warnings', label: 'Advertencias' },
-            { id: 'passed', label: 'Aprobados' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveFilter(tab.id)}
-              className={`px-6 py-2.5 rounded-xl font-semibold transition-all duration-300 border
-                ${activeFilter === tab.id 
-                  ? 'bg-emerald-500 text-white border-emerald-400 shadow-lg shadow-emerald-500/20' 
-                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'}`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Detailed Results */}
-        <div className="space-y-12">
-          {Object.entries(grouped).map(([category, items]) => (
-            <div key={category} className="space-y-6">
-              <h2 className="text-xl font-bold flex items-center gap-3 text-slate-200">
-                <span className="w-1.5 h-6 bg-emerald-500 rounded-full"></span>
-                {category}
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {items.map((item, idx) => (
-                  <div key={idx} className={`glass p-6 card-result status-${item.status}`}>
-                    <div className="flex gap-4">
-                      <div className={`mt-1 shrink-0 ${
-                        item.status === 'passed' ? 'text-emerald-400' : 
-                        item.status === 'error' ? 'text-red-400' : 'text-amber-400'
-                      }`}>
-                        {item.status === 'passed' ? <CheckCircle size={20} /> : 
-                         item.status === 'error' ? <XCircle size={20} /> : <AlertCircle size={20} />}
+          <div className="grid-audit">
+             
+             {/* SIDEBAR */}
+             <aside>
+                <div className="sidebar-summary shadow-2xl">
+                   <div className="score-circle-wrap">
+                      <svg width="180" height="180" viewBox="0 0 180 180" style={{ transform: 'rotate(-90deg)' }}>
+                         <circle cx="90" cy="90" r="80" stroke="rgba(255,255,255,0.05)" strokeWidth="10" fill="transparent" />
+                         <circle cx="90" cy="90" r="80" stroke="var(--accent)" strokeWidth="10" fill="transparent" strokeDasharray="502.6" strokeDashoffset={502.6 * (1 - results.score / 100)} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 1s ease-out' }} />
+                      </svg>
+                      <div className="score-text">
+                         <div style={{ fontSize: '3.5rem', fontWeight: 900, lineHeight: '1', color: 'white' }}>{results.score}</div>
+                         <div style={{ fontSize: '0.6rem', fontWeight: 900, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Puntaje</div>
                       </div>
-                      <div className="space-y-3 w-full">
-                        <div className="flex justify-between items-start">
-                          <h4 className="font-bold text-white leading-tight">{item.rule}</h4>
-                          {item.page && item.page > 0 && (
-                            <span className="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-bold text-slate-400">PÁG. {item.page}</span>
-                          )}
+                   </div>
+
+                   <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
+                      <span className={`badge ${results.score >= 80 ? 'badge-success' : results.score >= 60 ? 'badge-warning' : 'badge-error'}`}>
+                         {results.score >= 80 ? 'Excelente' : results.score >= 60 ? 'Aceptable' : 'Estado Crítico'}
+                      </span>
+                   </div>
+
+                   <div className="stats-list">
+                      {[
+                        { label: "Validaciones OK", val: results.passedCount, color: "var(--success)", bg: "rgba(69, 245, 229, 0.05)", icon: <CheckCircle size={16}/> },
+                        { label: "Errores Críticos", val: results.errorCount, color: "var(--error)", bg: "rgba(255, 77, 77, 0.05)", icon: <XCircle size={16}/> },
+                        { label: "Advertencias", val: results.warningCount, color: "var(--warning)", bg: "rgba(255, 193, 7, 0.05)", icon: <AlertCircle size={16}/> }
+                      ].map((s, i) => (
+                        <div key={i} className="stat-row">
+                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                              <div style={{ color: s.color, background: s.bg, width: '32px', height: '32px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyCenter: 'center' }}>{s.icon}</div>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94A3B8' }}>{s.label}</span>
+                           </div>
+                           <span style={{ fontSize: '1.25rem', fontWeight: 900, color: s.color }}>{s.val}</span>
                         </div>
-                        <p className="text-slate-400 text-sm leading-relaxed">{item.message}</p>
-                        
-                        {(item.expected || item.actual) && (
-                          <div className="pt-3 flex gap-4 border-t border-slate-800/50">
-                            {item.expected && (
-                              <div className="space-y-0.5">
-                                <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Esperado</div>
-                                <div className="text-xs text-emerald-400 font-semibold">{item.expected}</div>
-                              </div>
-                            )}
-                            {item.actual && (
-                              <div className="space-y-0.5">
-                                <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Encontrado</div>
-                                <div className="text-xs text-red-400 font-semibold">{item.actual}</div>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                      ))}
+                   </div>
+                   
+                   <div style={{ marginTop: '2.5rem', paddingTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.05)', fontSize: '0.6rem', color: '#475569', textAlign: 'center', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                      <ShieldCheck size={14} style={{ marginBottom: '0.5rem', display: 'block', margin: '0 auto 0.5rem' }} />
+                      Auditoría Protegida UNAP
+                   </div>
+                </div>
+             </aside>
+
+             {/* MAIN CONTENT TABLE */}
+             <div className="main-audit-content">
+                <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                   {['all', 'error', 'warning', 'passed'].map((f) => (
+                     <button 
+                       key={f}
+                       onClick={() => setActiveFilter(f)}
+                       style={{ 
+                         padding: '0.7rem 1.5rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)',
+                         fontSize: '0.65rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em',
+                         cursor: 'pointer', transition: '0.3s',
+                         background: activeFilter === f ? 'white' : 'rgba(255,255,255,0.03)',
+                         color: activeFilter === f ? 'black' : '#94A3B8'
+                       }}
+                     >
+                       {f === 'all' ? 'Ver Todos' : f === 'error' ? 'Críticos' : f === 'warning' ? 'Alertas' : 'Correctos'}
+                     </button>
+                   ))}
+                </div>
+
+                <div className="audit-table-container">
+                   <table className="audit-table">
+                      <thead>
+                         <tr>
+                            <th style={{ width: '50px', textAlign: 'center' }}>#</th>
+                            <th>Regla y Estructura</th>
+                            <th>Estándar Esperado</th>
+                            <th>Valor Detectado</th>
+                            <th style={{ textAlign: 'center' }}>Pág</th>
+                            <th style={{ textAlign: 'right' }}>Estado</th>
+                         </tr>
+                      </thead>
+                      <tbody>
+                         {results.results
+                           .filter(item => activeFilter === 'all' || item.status === activeFilter)
+                           .map((item, idx) => (
+                            <tr key={idx}>
+                               <td style={{ textAlign: 'center', color: '#475569', fontWeight: 800 }}>{idx + 1}</td>
+                               <td>
+                                  <div style={{ fontWeight: 800, marginBottom: '0.25rem', fontSize: '0.9rem' }}>{item.rule}</div>
+                                  <div style={{ fontSize: '0.6rem', color: '#64748B', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                     <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: item.status === 'passed' ? 'var(--success)' : item.status === 'error' ? 'var(--error)' : 'var(--warning)' }}></div>
+                                     {item.category || 'REGLA'}
+                                  </div>
+                               </td>
+                               <td style={{ color: '#94A3B8', fontSize: '0.8rem' }}>{item.expected || '—'}</td>
+                               <td style={{ fontWeight: 700, fontSize: '0.8rem', color: item.status === 'passed' ? 'var(--accent)' : 'var(--text-main)' }}>{item.actual || '—'}</td>
+                               <td style={{ textAlign: 'center' }}>
+                                  {item.paragraphIndex !== undefined ? (
+                                    <span style={{ padding: '0.2rem 0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', fontSize: '0.7rem', color: '#64748B', fontWeight: 800 }}>
+                                       {Math.floor(item.paragraphIndex / 20) + 1}
+                                    </span>
+                                  ) : '—'}
+                               </td>
+                               <td style={{ textAlign: 'right' }}>
+                                  <span className={`badge ${item.status === 'passed' ? 'badge-success' : item.status === 'error' ? 'badge-error' : 'badge-warning'}`}>
+                                     {item.status}
+                                  </span>
+                               </td>
+                            </tr>
+                         ))}
+                      </tbody>
+                   </table>
+                   
+                   {results.results.filter(item => activeFilter === 'all' || item.status === activeFilter).length === 0 && (
+                      <div style={{ padding: '6rem 0', textAlign: 'center', color: '#475569' }}>
+                         <Eye size={48} style={{ opacity: 0.1, marginBottom: '1rem' }} />
+                         <div style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.7rem' }}>No hay hallazgos con este filtro</div>
                       </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+                   )}
+                </div>
+                
+                <div className="flex-between" style={{ marginTop: '1.5rem', padding: '0 1rem', fontSize: '0.65rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                   <div>Total Validaciones: {results.totalRules}</div>
+                   <div>v2.0 Sincronizado | © 2025 VRI UNAP</div>
+                </div>
+             </div>
+          </div>
+       </div>
     </main>
   );
+}
 }
