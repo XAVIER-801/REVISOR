@@ -3,9 +3,11 @@ import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 
 // We need to import our engine modules
-const DocxParser = require('../../../lib/engine/docxParser');
-const RuleEngine = require('../../../lib/engine/ruleEngine');
-const DocxAnnotator = require('../../../lib/engine/docxAnnotator');
+import DocxParser from '../../../lib/engine/docxParser';
+import RuleEngine from '../../../lib/engine/ruleEngine';
+import DocxAnnotator from '../../../lib/engine/docxAnnotator';
+import PdfParser from '../../../lib/engine/pdfParser';
+import PdfAnnotator from '../../../lib/engine/pdfAnnotator';
 
 export const config = {
   api: {
@@ -24,9 +26,12 @@ export async function POST(request) {
 
     // Validate file type
     const fileName = file.name;
-    if (!fileName.toLowerCase().endsWith('.docx')) {
+    const isDocx = fileName.toLowerCase().endsWith('.docx');
+    const isPdf = fileName.toLowerCase().endsWith('.pdf');
+
+    if (!isDocx && !isPdf) {
       return NextResponse.json(
-        { error: 'Solo se aceptan archivos .docx (Word). Por favor, convierta su documento.' },
+        { error: 'Solo se aceptan archivos .docx (Word) o .pdf. Por favor, suba un formato válido.' },
         { status: 400 }
       );
     }
@@ -35,31 +40,39 @@ export async function POST(request) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // 1. Parse the DOCX
-    const parser = new DocxParser(buffer);
-    const parsedDoc = await parser.parse();
+    // 1. Parse the document
+    let parsedDoc;
+    if (isDocx) {
+      const parser = new DocxParser(buffer);
+      parsedDoc = await parser.parse();
+    } else {
+      const parser = new PdfParser(buffer);
+      parsedDoc = await parser.parse();
+    }
 
     // 2. Run the rule engine
     const engine = new RuleEngine(parsedDoc);
-    const results = engine.analyze();
+    const analysis = engine.analizar();
 
-    // 3. Generate annotated DOCX
-    const annotator = new DocxAnnotator(buffer);
-    const annotatedBuffer = await annotator.annotate(results);
+    // 3. Generate annotated document
+    let annotatedBuffer;
+    if (isDocx) {
+      const annotator = new DocxAnnotator(buffer);
+      annotatedBuffer = await annotator.annotate(analysis); // Passing full analysis
+    } else {
+      const annotator = new PdfAnnotator(buffer);
+      annotatedBuffer = await annotator.annotate(analysis); // Passing full analysis
+    }
 
     // 4. Save annotated file temporarily
     const tmpDir = path.join(process.cwd(), 'tmp');
     await mkdir(tmpDir, { recursive: true });
     
-    const annotatedFileName = `revisado_${fileName}`;
+    const safeName = fileName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9.-]/g, '_');
+    const annotatedFileName = `revisado_${safeName}`;
     const annotatedPath = path.join(tmpDir, annotatedFileName);
     await writeFile(annotatedPath, annotatedBuffer);
 
-    // 5. Also save original buffer for the preview
-    const originalPath = path.join(tmpDir, `original_${fileName}`);
-    await writeFile(originalPath, buffer);
-
-    // 6. Convert annotated DOCX to base64 for preview
     const annotatedBase64 = annotatedBuffer.toString('base64');
 
     // 7. Return results
@@ -68,40 +81,12 @@ export async function POST(request) {
       fileName: fileName,
       annotatedFileName: annotatedFileName,
       results: {
-        score: results.score,
-        totalRules: results.totalRules,
-        errorCount: results.errorCount,
-        warningCount: results.warningCount,
-        passedCount: results.passedCount,
-        errors: results.errors.map(e => ({
-          id: e.id,
-          category: e.category,
-          rule: e.rule,
-          status: e.status,
-          message: e.message,
-          expected: e.expected,
-          actual: e.actual,
-          details: e.details?.slice(0, 5)
-        })),
-        warnings: results.warnings.map(w => ({
-          id: w.id,
-          category: w.category,
-          rule: w.rule,
-          status: w.status,
-          message: w.message,
-          expected: w.expected,
-          actual: w.actual,
-          details: w.details?.slice(0, 5)
-        })),
-        passed: results.passed.map(p => ({
-          id: p.id,
-          category: p.category,
-          rule: p.rule,
-          status: p.status,
-          message: p.message,
-          expected: p.expected,
-          actual: p.actual
-        }))
+        score: analysis.stats.score,
+        totalRules: analysis.results.length,
+        errorCount: analysis.stats.errors,
+        warningCount: analysis.stats.warnings,
+        passedCount: analysis.stats.passed,
+        results: analysis.results
       },
       annotatedBase64: annotatedBase64,
       paragraphCount: parsedDoc.paragraphs.length

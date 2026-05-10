@@ -22,7 +22,7 @@
   },
   "structure": {
     "requiredSections": [
-      { "id": "portada", "name": "PORTADA", "required": true, "keywords": ["UNIVERSIDAD NACIONAL DEL ALTIPLANO"] },
+      { "id": "portada", "name": "PORTADA", "required": true, "keywords": ["UNIVERSIDAD NACIONAL DEL ALTIPLANO", "UNAP"] },
       { "id": "similitud", "name": "REPORTE DE SIMILITUD", "required": true, "keywords": ["REPORTE DE SIMILITUD"] },
       { "id": "jurados", "name": "HOJA DE JURADOS", "required": true, "keywords": ["APROBADA POR EL JURADO REVISOR", "JURADO REVISOR"] },
       { "id": "dedicatoria", "name": "DEDICATORIA", "required": true, "keywords": ["DEDICATORIA"] },
@@ -34,13 +34,13 @@
       { "id": "acronimos", "name": "ACRÓNIMOS", "required": false, "keywords": ["ACRÓNIMOS"] },
       { "id": "resumen", "name": "RESUMEN", "required": true, "keywords": ["RESUMEN"] },
       { "id": "abstract", "name": "ABSTRACT", "required": true, "keywords": ["ABSTRACT"] },
-      { "id": "capituloI", "name": "CAPÍTULO I - INTRODUCCIÓN", "required": true, "keywords": ["CAPÍTULO I", "CAPITULO I"] },
-      { "id": "capituloII", "name": "CAPÍTULO II - REVISIÓN DE LITERATURA", "required": true, "keywords": ["CAPÍTULO II", "CAPITULO II"] },
-      { "id": "capituloIII", "name": "CAPÍTULO III - MATERIALES Y MÉTODOS", "required": true, "keywords": ["CAPÍTULO III", "CAPITULO III"] },
-      { "id": "capituloIV", "name": "CAPÍTULO IV - RESULTADOS Y DISCUSIÓN", "required": true, "keywords": ["CAPÍTULO IV", "CAPITULO IV"] },
-      { "id": "conclusiones", "name": "V. CONCLUSIONES", "required": true, "keywords": ["CONCLUSIONES"] },
-      { "id": "recomendaciones", "name": "VI. RECOMENDACIONES", "required": true, "keywords": ["RECOMENDACIONES"] },
-      { "id": "referencias", "name": "VII. REFERENCIAS BIBLIOGRÁFICAS", "required": true, "keywords": ["REFERENCIAS BIBLIOGRÁFICAS", "REFERENCIAS BIBLIOGRAFICAS"] },
+      { "id": "capituloI", "name": "CAPÍTULO I - INTRODUCCIÓN", "required": true, "keywords": ["CAPÍTULO I", "INTRODUCCIÓN"] },
+      { "id": "capituloII", "name": "CAPÍTULO II - REVISIÓN DE LITERATURA", "required": true, "keywords": ["CAPÍTULO II", "REVISIÓN DE LITERATURA"] },
+      { "id": "capituloIII", "name": "CAPÍTULO III - MATERIALES Y MÉTODOS", "required": true, "keywords": ["CAPÍTULO III", "MATERIALES Y MÉTODOS"] },
+      { "id": "capituloIV", "name": "CAPÍTULO IV - RESULTADOS Y DISCUSIÓN", "required": true, "keywords": ["CAPÍTULO IV", "RESULTADOS Y DISCUSIÓN"] },
+      { "id": "conclusiones", "name": "V. CONCLUSIONES", "required": true, "keywords": ["V. CONCLUSIONES", "CONCLUSIONES"] },
+      { "id": "recomendaciones", "name": "VI. RECOMENDACIONES", "required": true, "keywords": ["VI. RECOMENDACIONES", "RECOMENDACIONES"] },
+      { "id": "referencias", "name": "VII. REFERENCIAS BIBLIOGRÁFICAS", "required": true, "keywords": ["VII. REFERENCIAS BIBLIOGRÁFICAS", "REFERENCIAS BIBLIOGRÁFICAS"] },
       { "id": "anexos", "name": "ANEXOS", "required": true, "keywords": ["ANEXOS"] }
     ]
   },
@@ -62,12 +62,6 @@
       "alignment": "center",
       "bold": true,
       "noIndent": true,
-      "universityFontSize": 36,
-      "facultyFontSize": 32,
-      "schoolFontSize": 28,
-      "titleFontSize": 28,
-      "thesisFontSize": 32,
-      "authorFontSize": 28,
       "logoWidth": "4.33cm",
       "logoHeight": "4.68cm"
     },
@@ -86,32 +80,21 @@
   },
   "titles": {
     "level1": {
-      "description": "Capítulos (CAPÍTULO I, II, III, IV)",
       "fontSize": 32,
       "fontSizeDisplay": "16 ptos",
       "alignment": "center",
       "bold": true,
       "case": "upper"
     },
-    "level1Name": {
-      "description": "Nombre del capítulo (INTRODUCCIÓN, etc.)",
+    "level2": {
       "fontSize": 28,
       "fontSizeDisplay": "14 ptos",
-      "alignment": "center",
-      "bold": true,
-      "case": "upper"
-    },
-    "level2": {
-      "description": "Títulos de nivel 2 (1.1., 2.1., etc.)",
-      "fontSize": 24,
-      "fontSizeDisplay": "12 ptos",
       "bold": true,
       "case": "upper",
       "indentLeft": 0,
       "hangingIndent": 709
     },
     "level3": {
-      "description": "Títulos de nivel 3 (1.1.1., etc.)",
       "fontSize": 24,
       "fontSizeDisplay": "12 ptos",
       "bold": true,
@@ -120,7 +103,6 @@
       "hangingIndent": 709
     },
     "level4": {
-      "description": "Títulos de nivel 4 y 5",
       "fontSize": 24,
       "fontSizeDisplay": "12 ptos",
       "bold": true,

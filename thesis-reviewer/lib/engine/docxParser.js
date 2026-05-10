@@ -4,6 +4,11 @@
  * - word/document.xml: main content
  * - word/styles.xml: styles definitions
  * - word/settings.xml: document settings
+ * 
+ * CRITICAL: This parser resolves style inheritance. When a paragraph references
+ * a style (e.g. "Heading1"), the parser looks up that style's run properties
+ * (bold, fontSize, fontName) and applies them to any runs that don't have
+ * those properties set explicitly.
  */
 const JSZip = require('jszip');
 const xml2js = require('xml2js');
@@ -15,6 +20,20 @@ const {
   getDefaultRunProps
 } = require('../utils/ooxmlHelpers');
 
+// We need the text extractor from the helpers
+function extractTextFromNode(t) {
+  if (!t) return '';
+  if (typeof t === 'string') return t;
+  if (typeof t === 'number') return t.toString();
+  if (Array.isArray(t)) return t.map(item => extractTextFromNode(item)).join('');
+  if (typeof t === 'object') {
+    if (t._ !== undefined) return String(t._);
+    if (t.$ && Object.keys(t).length === 1) return '';
+    return '';
+  }
+  return '';
+}
+
 class DocxParser {
   constructor(buffer) {
     this.buffer = buffer;
@@ -24,6 +43,7 @@ class DocxParser {
     this.paragraphs = [];
     this.sectionProps = {};
     this.defaultRunProps = {};
+    this.styleMap = {}; // Maps style IDs to their run properties
   }
 
   async parse() {
@@ -35,12 +55,13 @@ class DocxParser {
     const parser = new xml2js.Parser({ explicitArray: false, preserveChildrenOrder: true });
     this.documentXml = await parser.parseStringPromise(documentXmlStr);
 
-    // 3. Parse styles.xml if exists
+    // 3. Parse styles.xml if exists — build a style map for inheritance
     const stylesFile = this.zip.file('word/styles.xml');
     if (stylesFile) {
       const stylesXmlStr = await stylesFile.async('string');
       this.stylesXml = await parser.parseStringPromise(stylesXmlStr);
       this.defaultRunProps = getDefaultRunProps(this.stylesXml);
+      this._buildStyleMap();
     }
 
     // 4. Extract body
@@ -61,6 +82,91 @@ class DocxParser {
     };
   }
 
+  /**
+   * Build a map of style IDs -> run properties from styles.xml
+   * This is used for style inheritance resolution.
+   */
+  _buildStyleMap() {
+    if (!this.stylesXml || !this.stylesXml['w:styles']) return;
+    const styles = this.stylesXml['w:styles'];
+    let styleList = styles['w:style'];
+    if (!styleList) return;
+    if (!Array.isArray(styleList)) styleList = [styleList];
+
+    for (const style of styleList) {
+      const id = style.$?.['w:styleId'];
+      if (!id) continue;
+
+      const runProps = {};
+
+      // Get rPr from the style definition
+      const rPr = style['w:rPr'];
+      if (rPr) {
+        const resolved = getRunProperties({ 'w:rPr': rPr });
+        Object.assign(runProps, resolved);
+      }
+
+      // Get paragraph-level rPr too (w:pPr -> w:rPr)
+      const pPr = style['w:pPr'];
+      if (pPr) {
+        const pPrObj = Array.isArray(pPr) ? pPr[0] : pPr;
+        if (pPrObj['w:rPr']) {
+          const resolved = getRunProperties({ 'w:rPr': pPrObj['w:rPr'] });
+          // Only fill in what wasn't already set
+          for (const key of Object.keys(resolved)) {
+            if (runProps[key] === undefined) runProps[key] = resolved[key];
+          }
+        }
+      }
+
+      // Check for basedOn style (chain inheritance)
+      const basedOn = style['w:basedOn'];
+      if (basedOn) {
+        const baseId = (Array.isArray(basedOn) ? basedOn[0] : basedOn).$?.['w:val'];
+        if (baseId) runProps._basedOn = baseId;
+      }
+
+      this.styleMap[id] = runProps;
+    }
+
+    // Resolve basedOn chains (up to 5 levels deep)
+    for (let pass = 0; pass < 5; pass++) {
+      for (const id of Object.keys(this.styleMap)) {
+        const props = this.styleMap[id];
+        if (props._basedOn && this.styleMap[props._basedOn]) {
+          const parent = this.styleMap[props._basedOn];
+          for (const key of Object.keys(parent)) {
+            if (key === '_basedOn') continue;
+            if (props[key] === undefined) props[key] = parent[key];
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Resolve run properties by merging: explicit run props > paragraph style > default
+   */
+  _resolveRunProperties(runExplicitProps, paragraphStyleId) {
+    const resolved = { ...runExplicitProps };
+    
+    // Fill from paragraph style
+    if (paragraphStyleId && this.styleMap[paragraphStyleId]) {
+      const styleProps = this.styleMap[paragraphStyleId];
+      for (const key of Object.keys(styleProps)) {
+        if (key === '_basedOn') continue;
+        if (resolved[key] === undefined) resolved[key] = styleProps[key];
+      }
+    }
+
+    // Fill from document defaults
+    for (const key of Object.keys(this.defaultRunProps)) {
+      if (resolved[key] === undefined) resolved[key] = this.defaultRunProps[key];
+    }
+
+    return resolved;
+  }
+
   _extractParagraphs(body) {
     const paragraphElements = body['w:p'];
     if (!paragraphElements) return [];
@@ -70,7 +176,7 @@ class DocxParser {
     return pList.map((p, index) => {
       const text = getParagraphText(p);
       const props = getParagraphProperties(p);
-      const runs = this._extractRuns(p);
+      const runs = this._extractRuns(p, props.style);
 
       return {
         index,
@@ -83,23 +189,20 @@ class DocxParser {
     });
   }
 
-  _extractRuns(paragraph) {
+  _extractRuns(paragraph, paragraphStyleId) {
     if (!paragraph['w:r']) return [];
     const runElements = Array.isArray(paragraph['w:r']) ? paragraph['w:r'] : [paragraph['w:r']];
 
     return runElements.map(run => {
-      const text = run['w:t'];
-      let textContent = '';
-      if (text) {
-        if (typeof text === 'string') textContent = text;
-        else if (text._) textContent = text._;
-        else if (Array.isArray(text)) textContent = text.map(t => typeof t === 'string' ? t : (t._ || '')).join('');
-        else textContent = text.toString();
-      }
+      const textContent = extractTextFromNode(run['w:t']);
+      const explicitProps = getRunProperties(run);
+      
+      // Resolve with style inheritance
+      const resolvedProps = this._resolveRunProperties(explicitProps, paragraphStyleId);
 
       return {
         text: textContent,
-        properties: getRunProperties(run),
+        properties: resolvedProps,
         raw: run
       };
     });
@@ -132,4 +235,4 @@ class DocxParser {
   }
 }
 
-module.exports = DocxParser;
+export default DocxParser;

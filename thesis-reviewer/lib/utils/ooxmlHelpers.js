@@ -43,6 +43,28 @@ function lineSpacingToDisplay(value) {
 }
 
 /**
+ * Safely extract text from a w:t node, handling all OOXML variations:
+ * - string: "hello"
+ * - object with _: { _: "hello", $: { "xml:space": "preserve" } }
+ * - array of mixed: ["hello", { _: " world" }]
+ * - empty object: {} (no text)
+ */
+function extractTextFromNode(t) {
+  if (!t) return '';
+  if (typeof t === 'string') return t;
+  if (typeof t === 'number') return t.toString();
+  if (Array.isArray(t)) return t.map(item => extractTextFromNode(item)).join('');
+  // Object — check for _ (text content), otherwise it's an empty element
+  if (typeof t === 'object') {
+    if (t._ !== undefined) return String(t._);
+    // If it only has $ (attributes) and no text, return empty
+    if (t.$ && Object.keys(t).length === 1) return '';
+    return '';
+  }
+  return '';
+}
+
+/**
  * Get text content from a paragraph element
  */
 function getParagraphText(paragraph) {
@@ -50,15 +72,14 @@ function getParagraphText(paragraph) {
   const runs = Array.isArray(paragraph['w:r']) ? paragraph['w:r'] : [paragraph['w:r']];
   return runs.map(run => {
     if (!run['w:t']) return '';
-    const t = run['w:t'];
-    if (typeof t === 'string') return t;
-    if (Array.isArray(t)) return t.map(item => typeof item === 'string' ? item : (item._ || '')).join('');
-    return t._ || t.toString() || '';
+    return extractTextFromNode(run['w:t']);
   }).join('');
 }
 
 /**
  * Get paragraph properties
+ * CRITICAL: Property names are mapped to match exactly what ruleEngine.js expects:
+ *   alignment, indent, hangingIndent, firstLineIndent, lineSpacing, etc.
  */
 function getParagraphProperties(paragraph) {
   const pPr = paragraph['w:pPr'] ? (Array.isArray(paragraph['w:pPr']) ? paragraph['w:pPr'][0] : paragraph['w:pPr']) : null;
@@ -83,14 +104,18 @@ function getParagraphProperties(paragraph) {
     }
   }
 
-  // Indentation
+  // Indentation — mapped to the names ruleEngine.js uses
   if (pPr['w:ind']) {
     const ind = Array.isArray(pPr['w:ind']) ? pPr['w:ind'][0] : pPr['w:ind'];
     if (ind.$) {
-      props.indentLeft = ind.$['w:left'] ? parseInt(ind.$['w:left']) : 0;
+      props.indent = ind.$['w:left'] ? parseInt(ind.$['w:left']) : 0;
+      props.hangingIndent = ind.$['w:hanging'] ? parseInt(ind.$['w:hanging']) : 0;
+      props.firstLineIndent = ind.$['w:firstLine'] ? parseInt(ind.$['w:firstLine']) : 0;
+      // Keep the verbose names too for any code that might reference them
+      props.indentLeft = props.indent;
       props.indentRight = ind.$['w:right'] ? parseInt(ind.$['w:right']) : 0;
-      props.indentFirstLine = ind.$['w:firstLine'] ? parseInt(ind.$['w:firstLine']) : undefined;
-      props.indentHanging = ind.$['w:hanging'] ? parseInt(ind.$['w:hanging']) : undefined;
+      props.indentHanging = props.hangingIndent;
+      props.indentFirstLine = props.firstLineIndent;
     }
   }
 
@@ -98,6 +123,15 @@ function getParagraphProperties(paragraph) {
   if (pPr['w:pStyle']) {
     const pStyle = Array.isArray(pPr['w:pStyle']) ? pPr['w:pStyle'][0] : pPr['w:pStyle'];
     props.style = pStyle.$ ? pStyle.$['w:val'] : undefined;
+  }
+
+  // Numbering (for bulleted/numbered lists)
+  if (pPr['w:numPr']) {
+    const numPr = Array.isArray(pPr['w:numPr']) ? pPr['w:numPr'][0] : pPr['w:numPr'];
+    if (numPr['w:numId']) {
+      const numId = Array.isArray(numPr['w:numId']) ? numPr['w:numId'][0] : numPr['w:numId'];
+      props.numId = numId.$ ? parseInt(numId.$['w:val']) : undefined;
+    }
   }
 
   return props;
@@ -125,17 +159,28 @@ function getRunProperties(run) {
     const sz = Array.isArray(rPr['w:sz']) ? rPr['w:sz'][0] : rPr['w:sz'];
     props.fontSize = sz.$ ? parseInt(sz.$['w:val']) : undefined;
   }
+  // Also check w:szCs (complex script font size) as fallback
+  if (!props.fontSize && rPr['w:szCs']) {
+    const szCs = Array.isArray(rPr['w:szCs']) ? rPr['w:szCs'][0] : rPr['w:szCs'];
+    props.fontSize = szCs.$ ? parseInt(szCs.$['w:val']) : undefined;
+  }
 
-  // Bold
+  // Bold — check both w:b and w:bCs
   if (rPr['w:b']) {
     const b = Array.isArray(rPr['w:b']) ? rPr['w:b'][0] : rPr['w:b'];
     props.bold = b.$ ? b.$['w:val'] !== '0' && b.$['w:val'] !== 'false' : true;
+  } else if (rPr['w:bCs']) {
+    const bCs = Array.isArray(rPr['w:bCs']) ? rPr['w:bCs'][0] : rPr['w:bCs'];
+    props.bold = bCs.$ ? bCs.$['w:val'] !== '0' && bCs.$['w:val'] !== 'false' : true;
   }
 
-  // Italic
+  // Italic — check both w:i and w:iCs
   if (rPr['w:i']) {
     const i = Array.isArray(rPr['w:i']) ? rPr['w:i'][0] : rPr['w:i'];
     props.italic = i.$ ? i.$['w:val'] !== '0' && i.$['w:val'] !== 'false' : true;
+  } else if (rPr['w:iCs']) {
+    const iCs = Array.isArray(rPr['w:iCs']) ? rPr['w:iCs'][0] : rPr['w:iCs'];
+    props.italic = iCs.$ ? iCs.$['w:val'] !== '0' && iCs.$['w:val'] !== 'false' : true;
   }
 
   // Color
@@ -156,11 +201,19 @@ function getRunProperties(run) {
     props.highlight = hl.$ ? hl.$['w:val'] : undefined;
   }
 
+  // All caps
+  if (rPr['w:caps']) {
+    const caps = Array.isArray(rPr['w:caps']) ? rPr['w:caps'][0] : rPr['w:caps'];
+    props.caps = caps.$ ? caps.$['w:val'] !== '0' && caps.$['w:val'] !== 'false' : true;
+  }
+
   return props;
 }
 
 /**
  * Get section properties (margins, page size) from the document
+ * CRITICAL: Returns a `margins` object with `left`, `right`, `top`, `bottom`
+ * keys to match what ruleEngine.js expects.
  */
 function getSectionProperties(body) {
   const sectPr = body['w:sectPr'] ? (Array.isArray(body['w:sectPr']) ? body['w:sectPr'][0] : body['w:sectPr']) : null;
@@ -177,14 +230,21 @@ function getSectionProperties(body) {
     }
   }
 
-  // Margins
+  // Margins — ruleEngine.js expects: this.sectionProps.margins.left, .right, .top, .bottom
   if (sectPr['w:pgMar']) {
     const pgMar = Array.isArray(sectPr['w:pgMar']) ? sectPr['w:pgMar'][0] : sectPr['w:pgMar'];
     if (pgMar.$) {
-      props.marginTop = pgMar.$['w:top'] ? parseInt(pgMar.$['w:top']) : undefined;
-      props.marginBottom = pgMar.$['w:bottom'] ? parseInt(pgMar.$['w:bottom']) : undefined;
-      props.marginLeft = pgMar.$['w:left'] ? parseInt(pgMar.$['w:left']) : undefined;
-      props.marginRight = pgMar.$['w:right'] ? parseInt(pgMar.$['w:right']) : undefined;
+      props.margins = {
+        left: pgMar.$['w:left'] ? parseInt(pgMar.$['w:left']) : 1440,
+        right: pgMar.$['w:right'] ? parseInt(pgMar.$['w:right']) : 1440,
+        top: pgMar.$['w:top'] ? parseInt(pgMar.$['w:top']) : 1440,
+        bottom: pgMar.$['w:bottom'] ? parseInt(pgMar.$['w:bottom']) : 1440
+      };
+      // Keep flat keys too for backward compatibility
+      props.marginTop = props.margins.top;
+      props.marginBottom = props.margins.bottom;
+      props.marginLeft = props.margins.left;
+      props.marginRight = props.margins.right;
     }
   }
 

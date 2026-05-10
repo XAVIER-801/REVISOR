@@ -1,6 +1,12 @@
 /**
- * DOCX Annotator - Inserts visual annotations (highlights, comments, red text, borders) 
- * into the Word document XML to mark format errors in-place.
+ * DOCX Annotator Elite - Inserts high-fidelity visual markers and native Word comments.
+ * 
+ * CRITICAL DESIGN DECISION: This annotator does NOT use xml2js.Builder to rebuild
+ * the entire document.xml. Doing so destroys xml:space="preserve" attributes on
+ * w:t elements, causing Word to collapse spaces between runs (words get joined).
+ * 
+ * Instead, we work with the raw XML string using targeted regex insertions,
+ * preserving the original document structure perfectly.
  */
 const JSZip = require('jszip');
 const xml2js = require('xml2js');
@@ -9,212 +15,187 @@ class DocxAnnotator {
   constructor(originalBuffer) {
     this.originalBuffer = originalBuffer;
     this.zip = null;
-    this.documentObj = null;
-    // Use a builder that preserves the structure as much as possible
-    this.builder = new xml2js.Builder({ 
-      renderOpts: { pretty: false },
-      headless: false
-    });
+    this.rawDocXml = '';  // We work with the raw XML string
+    this.documentObj = null; // Only used for reading paragraph count
   }
 
   async init() {
     this.zip = await JSZip.loadAsync(this.originalBuffer);
-    const docXmlStr = await this.zip.file('word/document.xml').async('string');
+    this.rawDocXml = await this.zip.file('word/document.xml').async('string');
+    
+    // Parse only to count paragraphs and map indices
     const parser = new xml2js.Parser({ 
       explicitArray: false, 
       preserveChildrenOrder: true,
       attrkey: '$',
       charkey: '_'
     });
-    this.documentObj = await parser.parseStringPromise(docXmlStr);
+    this.documentObj = await parser.parseStringPromise(this.rawDocXml);
   }
 
-  /**
-   * Add annotations based on analysis results
-   */
-  async annotate(analysisResults) {
+  async annotate(analysis) {
     await this.init();
+    const { results, stats } = analysis;
+    const issues = results.filter(r => r.status !== 'passed');
 
-    const errors = analysisResults.errors || [];
-    const warnings = analysisResults.warnings || [];
-    const allIssues = [...errors, ...warnings];
+    // 1. Apply visual markers by modifying the raw XML string
+    this._applyVisualMarkersToRawXml(issues);
 
-    // 1. Modify paragraphs in-place with visual markers
-    this._applyVisualMarkers(allIssues);
+    // 2. Insert summary block at the beginning of the document
+    this._insertSummaryBlockToRawXml(stats, results);
 
-    // 2. Add summary block at the beginning
-    this._insertSummaryBlock(analysisResults);
-
-    // 3. Create/Update comments XML file and link them
-    const commentsXml = this._createCommentsXml(allIssues);
+    // 3. Create comments XML
+    const commentsXml = this._createCommentsXml(issues);
     this.zip.file('word/comments.xml', commentsXml);
 
-    // Update content types and relationships
+    // 4. Update content types and relationships
     await this._updateContentTypes();
     await this._updateRelationships();
 
-    // Save modified document.xml
-    const modifiedXml = this.builder.buildObject(this.documentObj);
-    this.zip.file('word/document.xml', modifiedXml);
+    // 5. Save the modified raw XML (preserving all original formatting)
+    this.zip.file('word/document.xml', this.rawDocXml);
 
     return await this.zip.generateAsync({ type: 'nodebuffer' });
   }
 
-  _applyVisualMarkers(issues) {
-    const body = this.documentObj['w:document']['w:body'];
-    const paragraphs = body['w:p'];
-    if (!paragraphs) return;
-
-    // Convert to array if it's a single object
-    let pList = Array.isArray(paragraphs) ? paragraphs : [paragraphs];
-    
-    // We need to be careful with the array reference if we want to update it in the object
-    if (!Array.isArray(paragraphs)) {
-      body['w:p'] = pList;
-    }
-
-    issues.forEach((issue, issueIdx) => {
+  /**
+   * Apply visual markers (shading + left border) to paragraphs with issues.
+   * Works by finding the Nth <w:p> in the raw XML and injecting shading into its <w:pPr>.
+   */
+  _applyVisualMarkersToRawXml(issues) {
+    // Build a map of paragraph index -> issues
+    const issuesByParagraph = {};
+    issues.forEach((issue, idx) => {
       const pIdx = issue.paragraphIndex;
-      if (pIdx === undefined || pIdx < 0 || pIdx >= pList.length) return;
-
-      const p = pList[pIdx];
-      
-      // Ensure paragraph properties exist
-      if (!p['w:pPr']) p['w:pPr'] = {};
-      const pPr = p['w:pPr'];
-
-      // Apply Paragraph Border (Simulates a "Box" around the error)
-      const color = issue.status === 'error' ? 'FF0000' : 'FF8800';
-      
-      // Box effect: apply borders to all 4 sides
-      pPr['w:pBdr'] = {
-        'w:top': { $: { 'w:val': 'single', 'w:sz': '18', 'w:space': '4', 'w:color': color } },
-        'w:bottom': { $: { 'w:val': 'single', 'w:sz': '18', 'w:space': '4', 'w:color': color } },
-        'w:left': { $: { 'w:val': 'single', 'w:sz': '18', 'w:space': '4', 'w:color': color } },
-        'w:right': { $: { 'w:val': 'single', 'w:sz': '18', 'w:space': '4', 'w:color': color } }
-      };
-
-      // Shading effect (light background)
-      pPr['w:shd'] = { $: { 'w:val': 'clear', 'w:color': 'auto', 'w:fill': issue.status === 'error' ? 'FFE6E6' : 'FFF9E6' } };
-
-      // Apply highlighting to all runs in the paragraph
-      if (p['w:r']) {
-        const runs = Array.isArray(p['w:r']) ? p['w:r'] : [p['w:r']];
-        runs.forEach(r => {
-          if (!r['w:rPr']) r['w:rPr'] = {};
-          const rPr = r['w:rPr'];
-          
-          // Highlighting (Text background)
-          rPr['w:highlight'] = { $: { 'w:val': issue.status === 'error' ? 'red' : 'yellow' } };
-          
-          // Underline
-          rPr['w:u'] = { $: { 'w:val': 'double', 'w:color': color } };
-          
-          // Change text color to red if error
-          if (issue.status === 'error') {
-            rPr['w:color'] = { $: { 'w:val': 'FF0000' } };
-          }
-        });
-      }
-
-      // Add a comment reference at the start of the paragraph content
-      const commentReference = { 
-        'w:r': { 
-          'w:rPr': { 
-            'w:rStyle': { $: { 'w:val': 'CommentReference' } } 
-          }, 
-          'w:commentReference': { $: { 'w:id': issueIdx.toString() } } 
-        } 
-      };
-
-      if (!p['w:commentRangeStart']) {
-        p['w:commentRangeStart'] = { $: { 'w:id': issueIdx.toString() } };
-        p['w:commentRangeEnd'] = { $: { 'w:id': issueIdx.toString() } };
-      }
+      if (pIdx === undefined || pIdx < 0) return;
+      if (!issuesByParagraph[pIdx]) issuesByParagraph[pIdx] = [];
+      issuesByParagraph[pIdx].push({ ...issue, commentId: idx });
     });
+
+    // Find all <w:p> positions in the raw XML
+    const pPositions = [];
+    const pRegex = /<w:p[\s>]/g;
+    let match;
+    while ((match = pRegex.exec(this.rawDocXml)) !== null) {
+      pPositions.push(match.index);
+    }
+
+    // Process paragraphs in reverse order (so string positions don't shift)
+    const sortedIndices = Object.keys(issuesByParagraph).map(Number).sort((a, b) => b - a);
+
+    for (const pIdx of sortedIndices) {
+      if (pIdx >= pPositions.length) continue;
+      
+      const issuesForP = issuesByParagraph[pIdx];
+      const worstStatus = issuesForP.some(i => i.status === 'error') ? 'error' : 'warning';
+      const color = worstStatus === 'error' ? 'FFA07A' : 'FFDAB9';
+      const bgColor = worstStatus === 'error' ? 'FFF5F0' : 'FFFAEF';
+
+      const pStart = pPositions[pIdx];
+      
+      // Find where this <w:p> element's content starts (after the opening tag)
+      const afterPTag = this.rawDocXml.indexOf('>', pStart) + 1;
+      
+      // Check if there's already a <w:pPr> inside this paragraph
+      const pEndTag = this.rawDocXml.indexOf('</w:p>', pStart);
+      const existingPPr = this.rawDocXml.indexOf('<w:pPr', pStart);
+      
+      if (existingPPr !== -1 && existingPPr < pEndTag) {
+        // There's an existing <w:pPr>. Find its closing tag and inject before it.
+        const pPrClose = this.rawDocXml.indexOf('</w:pPr>', existingPPr);
+        if (pPrClose !== -1 && pPrClose < pEndTag) {
+          const injection = `<w:shd w:val="clear" w:color="auto" w:fill="${bgColor}"/>` +
+            `<w:pBdr><w:left w:val="single" w:sz="12" w:space="4" w:color="${color}"/></w:pBdr>`;
+          this.rawDocXml = this.rawDocXml.slice(0, pPrClose) + injection + this.rawDocXml.slice(pPrClose);
+        }
+      } else {
+        // No <w:pPr> exists. Create one right after <w:p...>
+        const injection = `<w:pPr><w:shd w:val="clear" w:color="auto" w:fill="${bgColor}"/>` +
+          `<w:pBdr><w:left w:val="single" w:sz="12" w:space="4" w:color="${color}"/></w:pBdr></w:pPr>`;
+        this.rawDocXml = this.rawDocXml.slice(0, afterPTag) + injection + this.rawDocXml.slice(afterPTag);
+      }
+    }
   }
 
-  _insertSummaryBlock(results) {
-    const body = this.documentObj['w:document']['w:body'];
-    const { score, errorCount, warningCount, passedCount } = results;
+  /**
+   * Insert a summary report page at the very beginning of the document.
+   */
+  _insertSummaryBlockToRawXml(stats, results) {
+    const scoreColor = stats.score > 80 ? '27AE60' : (stats.score > 50 ? 'D68910' : 'C0392B');
+    const criticals = results.filter(r => r.status === 'error').slice(0, 10);
 
-    const summaryParagraphs = [];
+    let summaryXml = '';
     
-    // Add title and stats
-    summaryParagraphs.push(this._createSimpleParagraph('⚡ REPORTE DE REVISIÓN DE FORMATO - REPOSITORIO UNA PUNO', '1565C0', true, 28));
-    summaryParagraphs.push(this._createSimpleParagraph(`📊 Puntuación: ${score}/100  |  ✅ ${passedCount} aprobados  |  ❌ ${errorCount} errores  |  ⚠️ ${warningCount} advertencias`, '333333', false, 22));
-    summaryParagraphs.push(this._createSimpleParagraph('═══════════════════════════════════════════════════════', '2196F3', false, 20));
+    // Helper to create a simple paragraph
+    const mkP = (text, color, bold, size) => {
+      const bTag = bold ? '<w:b/>' : '';
+      return `<w:p><w:pPr><w:jc w:val="left"/></w:pPr>` +
+        `<w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>` +
+        `<w:sz w:val="${size}"/><w:color w:val="${color}"/>${bTag}</w:rPr>` +
+        `<w:t xml:space="preserve">${this._escapeXml(text)}</w:t></w:r></w:p>`;
+    };
 
-    // Errors summary
-    if (results.errors.length > 0) {
-      summaryParagraphs.push(this._createSimpleParagraph('❌ ERRORES ENCONTRADOS:', 'D32F2F', true, 24));
-      results.errors.forEach((err, i) => {
-        summaryParagraphs.push(this._createSimpleParagraph(`   ${i + 1}. [${err.category}] ${err.message}`, 'C62828', false, 20));
+    summaryXml += mkP('🏛️ REPORTE INSTITUCIONAL VRI-SCANNER 2.0', '0E6655', true, 32);
+    summaryXml += mkP('SISTEMA DE VALIDACIÓN DE TESIS - UNAP 2025', '1B4F72', true, 24);
+    summaryXml += mkP('──────────────────────────────────────────────', 'ABB2B9', false, 20);
+    summaryXml += mkP(`📊 PUNTAJE DE CUMPLIMIENTO: ${stats.score}/100`, scoreColor, true, 28);
+    summaryXml += mkP(`✅ Aprobados: ${stats.passed} | ❌ Errores: ${stats.errors} | ⚠️ Advertencias: ${stats.warnings}`, '34495E', false, 22);
+    summaryXml += mkP('──────────────────────────────────────────────', 'ABB2B9', false, 20);
+
+    if (criticals.length > 0) {
+      summaryXml += mkP('⚠️ PRINCIPALES OBSERVACIONES CRÍTICAS:', 'C0392B', true, 22);
+      criticals.forEach((c, i) => {
+        summaryXml += mkP(`   ${i + 1}. [${c.category}] ${c.rule}: ${c.message}`, '922B21', false, 18);
       });
     }
 
-    // Warnings summary
-    if (results.warnings.length > 0) {
-      summaryParagraphs.push(this._createSimpleParagraph('⚠️ ADVERTENCIAS:', 'F57F17', true, 24));
-      results.warnings.forEach((warn, i) => {
-        summaryParagraphs.push(this._createSimpleParagraph(`   ${i + 1}. [${warn.category}] ${warn.message}`, 'E65100', false, 20));
-      });
-    }
+    // Page break
+    summaryXml += '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
 
-    // Add page break
-    summaryParagraphs.push({
-      'w:pPr': {},
-      'w:r': { 'w:br': { $: { 'w:type': 'page' } } }
-    });
-
-    // Prepend to body
-    const existingPs = Array.isArray(body['w:p']) ? body['w:p'] : (body['w:p'] ? [body['w:p']] : []);
-    body['w:p'] = [...summaryParagraphs, ...existingPs];
+    // Insert after <w:body> opening tag
+    const bodyStart = this.rawDocXml.indexOf('<w:body');
+    const bodyTagEnd = this.rawDocXml.indexOf('>', bodyStart) + 1;
+    this.rawDocXml = this.rawDocXml.slice(0, bodyTagEnd) + summaryXml + this.rawDocXml.slice(bodyTagEnd);
   }
 
-  _createSimpleParagraph(text, color, bold, size) {
-    return {
-      'w:pPr': {
-        'w:spacing': { $: { 'w:after': '0', 'w:line': '240', 'w:lineRule': 'auto' } },
-        'w:jc': { $: { 'w:val': 'left' } }
-      },
-      'w:r': {
-        'w:rPr': {
-          'w:rFonts': { $: { 'w:ascii': 'Consolas', 'w:hAnsi': 'Consolas', 'w:cs': 'Consolas' } },
-          'w:sz': { $: { 'w:val': size.toString() } },
-          'w:szCs': { $: { 'w:val': size.toString() } },
-          'w:color': { $: { 'w:val': color } },
-          ...(bold ? { 'w:b': {}, 'w:bCs': {} } : {})
-        },
-        'w:t': { _: text }
-      }
-    };
+  _escapeXml(text) {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
   }
 
   _createCommentsXml(issues) {
+    const builder = new xml2js.Builder({ renderOpts: { pretty: false }, headless: false });
     const comments = issues.map((issue, idx) => ({
       $: {
         'w:id': idx.toString(),
-        'w:author': 'Revisor UNA Puno',
-        'w:date': '2025-01-01T00:00:00Z',
-        'w:initials': 'RUP'
+        'w:author': 'VRI-SCANNER',
+        'w:date': new Date().toISOString(),
+        'w:initials': 'VRI'
       },
       'w:p': [
         {
           'w:pPr': { 'w:pStyle': { $: { 'w:val': 'CommentText' } } },
           'w:r': [
-            { 'w:rPr': { 'w:b': {}, 'w:color': { $: { 'w:val': issue.status === 'error' ? 'FF0000' : 'FF8800' } } }, 'w:t': `${issue.status === 'error' ? '❌ ERROR' : '⚠️ ADVERTENCIA'}: ` },
-            { 'w:t': issue.message }
+            { 'w:rPr': { 'w:b': {}, 'w:color': { $: { 'w:val': issue.status === 'error' ? 'FF0000' : 'FF8800' } } }, 'w:t': `${issue.status.toUpperCase()}: ` },
+            { 'w:t': issue.rule }
           ]
         },
         {
           'w:pPr': { 'w:pStyle': { $: { 'w:val': 'CommentText' } } },
-          'w:r': { 'w:rPr': { 'w:i': {} }, 'w:t': `Esperado: ${issue.expected} | Encontrado: ${issue.actual}` }
-        }
+          'w:r': { 'w:t': issue.message }
+        },
+        ...(issue.expected ? [{
+          'w:pPr': { 'w:pStyle': { $: { 'w:val': 'CommentText' } } },
+          'w:r': { 'w:rPr': { 'w:i': {} }, 'w:t': `Esperado: ${issue.expected} | Encontrado: ${issue.actual || 'No detectado'}` }
+        }] : [])
       ]
     }));
 
-    return this.builder.buildObject({
+    return builder.buildObject({
       'w:comments': {
         $: {
           'xmlns:w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
@@ -246,4 +227,4 @@ class DocxAnnotator {
   }
 }
 
-module.exports = DocxAnnotator;
+export default DocxAnnotator;
