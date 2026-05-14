@@ -191,6 +191,22 @@ export default function Home() {
                    <h2 style={{ fontSize: '1.8rem', fontWeight: 900, letterSpacing: '-0.04em' }}>
                       {file?.name.length > 40 ? file?.name.substring(0, 40) + '...' : file?.name}
                       <span style={{ marginLeft: '1rem', padding: '0.2rem 0.6rem', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', fontSize: '0.65rem', color: '#64748B', fontWeight: 800, border: '1px solid rgba(255,255,255,0.05)' }}>DOCX</span>
+                       {results.engine && (
+                         <span style={{ 
+                           marginLeft: '0.5rem', 
+                           padding: '0.2rem 0.6rem', 
+                           background: results.engine === 'python-hifi' ? 'rgba(69, 245, 229, 0.1)' : 'rgba(255, 193, 7, 0.1)', 
+                           borderRadius: '6px', 
+                           fontSize: '0.6rem', 
+                           color: results.engine === 'python-hifi' ? '#45F5E5' : '#FFC107', 
+                           fontWeight: 900, 
+                           border: `1px solid ${results.engine === 'python-hifi' ? 'rgba(69, 245, 229, 0.2)' : 'rgba(255, 193, 7, 0.2)'}`,
+                           textTransform: 'uppercase',
+                           letterSpacing: '0.1em'
+                         }}>
+                           {results.engine === 'python-hifi' ? 'Motor Alta Fidelidad (Python)' : 'Motor de Respaldo (JS)'}
+                         </span>
+                       )}
                    </h2>
                 </div>
              </div>

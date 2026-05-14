@@ -1,5 +1,8 @@
 node_modules
 .next
+thesis-reviewer/node_modules
+thesis-reviewer/.next
+thesis-reviewer/tmp
 out
 build
 dist
