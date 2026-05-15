@@ -1,0 +1,23 @@
+1. Desestructuración (Fase de "Destrucción" o Extracción)
+Antes de analizar, el sistema necesita "abrir" el archivo .docx (que en realidad es un archivo comprimido tipo ZIP lleno de XMLs) para extraer los datos crudos.
+
+Estandarización: El sistema primero se asegura de que el archivo sea un .docx válido usando DocConverter.standardize_to_docx. Si subes un .doc antiguo, lo convierte.
+Lectura de XML: Utiliza la librería lxml para leer el archivo word/document.xml. Aquí es donde "destroza" el documento en piezas básicas.
+Extracción de Propiedades Reales: No solo lee el texto, sino que extrae:
+Párrafos: Alineación, interlineado, sangrías.
+Runs (Fragmentos): Negritas, cursivas, tamaño de fuente, tipo de letra.
+Estilos: Resuelve qué propiedades vienen de un "Estilo" (como 'Normal' o 'Título 1') y cuáles son cambios manuales del usuario.
+2. Análisis Experto (Fase de Auditoría)
+Una vez que el sistema tiene una lista de párrafos con sus propiedades exactas, aplica las reglas institucionales (ej. normas VRI-UNAP).
+
+Configuración Global: Revisa el tamaño de papel (A4) y los márgenes (2.5cm sup/inf/der, 3cm izq).
+Jerarquía de Títulos: Identifica palabras clave como "RESUMEN", "INTRODUCCIÓN" o "CAPÍTULO I" y verifica que cumplan con el formato (ej. 16pt, Negrita, Centrado).
+Detección de Contenido: Cuenta las palabras del Resumen (debe estar entre 250 y 300) y busca etiquetas obligatorias como "Palabras clave:".
+Formato de Cuerpo: Analiza una muestra de párrafos largos para verificar que la mayoría estén Justificados y tengan Sangría de 1.25cm.
+3. Reconstrucción y Anotación (Fase de "Volver a Armar")
+Esta es la parte más compleja visualmente, ya que genera un nuevo documento con los resultados inyectados.
+
+Inyección de Reporte Ejecutivo: Al inicio del documento, el sistema inserta varias páginas nuevas con un Puntaje de Cumplimiento y un resumen de todos los errores encontrados.
+Resaltado Visual: Recorre los párrafos donde hubo errores y les aplica un color de resaltado (Rojo para errores, Amarillo para advertencias).
+Comentarios Nativos (Margen Derecho): En lugar de solo escribir texto, el sistema usa manipulación de OXML (Open XML) para crear "Globos de Comentario" reales de Word. Esto permite que el estudiante vea exactamente qué parte está mal y por qué, tal como lo haría un asesor humano.
+Guardado: Genera un nuevo archivo llamado auditado_[nombre_original].docx y lo devuelve al usuario, eliminando los archivos temporales para garantizar la privacidad.

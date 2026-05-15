@@ -1,0 +1,173 @@
+"""
+Módulo de resolución de estilos usando lxml para parsear directamente el XML del .docx.
+Optimizado para detectar Negrita y Alineación heredada de estilos complejos.
+"""
+import zipfile
+from lxml import etree
+
+NSMAP = {
+    'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
+    'r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
+}
+
+def _val(el, attr='w:val'):
+    if el is None: return None
+    ns_attr = attr.replace('w:', f'{{{NSMAP["w"]}}}')
+    return el.get(ns_attr)
+
+def parse_rpr(rpr_el):
+    """Extrae propiedades de run desde un elemento w:rPr."""
+    if rpr_el is None: return {}
+    props = {}
+    
+    # Bold
+    b = rpr_el.find('w:b', NSMAP)
+    if b is not None:
+        v = _val(b)
+        props['bold'] = (v is None or v in ['1', 'true', 'on'])
+    
+    # Italic
+    i = rpr_el.find('w:i', NSMAP)
+    if i is not None:
+        v = _val(i)
+        props['italic'] = (v is None or v in ['1', 'true', 'on'])
+
+    # Font size
+    sz = rpr_el.find('w:sz', NSMAP)
+    if sz is not None:
+        v = _val(sz)
+        if v: props['font_size'] = int(v) / 2
+
+    # Font name
+    fonts = rpr_el.find('w:rFonts', NSMAP)
+    if fonts is not None:
+        ns = f'{{{NSMAP["w"]}}}'
+        for a in ['ascii', 'hAnsi', 'cs', 'eastAsia']:
+            fname = fonts.get(f'{ns}{a}')
+            if fname: 
+                props['font_name'] = fname
+                break
+    return props
+
+def parse_ppr(ppr_el):
+    """Extrae propiedades de párrafo."""
+    if ppr_el is None: return {}
+    props = {}
+    
+    # Alignment
+    jc = ppr_el.find('w:jc', NSMAP)
+    if jc is not None: props['alignment'] = _val(jc)
+
+    # Indents
+    ind = ppr_el.find('w:ind', NSMAP)
+    if ind is not None:
+        ns = f'{{{NSMAP["w"]}}}'
+        l = ind.get(f'{ns}left') or ind.get(f'{ns}start')
+        f = ind.get(f'{ns}firstLine')
+        h = ind.get(f'{ns}hanging')
+        if l: props['indent_left'] = int(l)
+        if f: props['indent_first'] = int(f)
+        if h: props['indent_hanging'] = int(h)
+
+    # Style
+    style = ppr_el.find('w:pStyle', NSMAP)
+    if style is not None: props['style_id'] = _val(style)
+
+    # Spacing
+    spacing = ppr_el.find('w:spacing', NSMAP)
+    if spacing is not None:
+        ns = f'{{{NSMAP["w"]}}}'
+        line = spacing.get(f'{ns}line')
+        if line: props['line_spacing'] = round(int(line) / 240, 2)
+        before = spacing.get(f'{ns}before')
+        after = spacing.get(f'{ns}after')
+        if before: props['spacing_before'] = int(before) / 20 
+        if after: props['spacing_after'] = int(after) / 20 
+
+    return props
+
+class StyleResolver:
+    def __init__(self, docx_path):
+        self.docx_path = docx_path
+        self.style_map = {}
+        self.default_rpr = {}
+        self.default_ppr = {}
+        self.section_props = {}
+        self._load_styles()
+        self._load_section_props()
+
+    def _load_styles(self):
+        try:
+            with zipfile.ZipFile(self.docx_path, 'r') as z:
+                if 'word/styles.xml' not in z.namelist(): return
+                root = etree.fromstring(z.read('word/styles.xml'))
+            
+            # Defaults
+            defs = root.find('w:docDefaults', NSMAP)
+            if defs is not None:
+                self.default_rpr = parse_rpr(defs.find('.//w:rPrDefault/w:rPr', NSMAP))
+                self.default_ppr = parse_ppr(defs.find('.//w:pPrDefault/w:pPr', NSMAP))
+
+            # Load styles and their inheritance
+            for s_el in root.findall('w:style', NSMAP):
+                sid = s_el.get(f'{{{NSMAP["w"]}}}styleId')
+                if not sid: continue
+                
+                rpr = parse_rpr(s_el.find('w:rPr', NSMAP))
+                ppr_el = s_el.find('w:pPr', NSMAP)
+                ppr = parse_ppr(ppr_el)
+                if ppr_el is not None:
+                    rpr.update(parse_rpr(ppr_el.find('w:rPr', NSMAP)))
+                
+                parent = _val(s_el.find('w:basedOn', NSMAP))
+                self.style_map[sid] = {'rpr': rpr, 'ppr': ppr, 'parent': parent}
+
+            # Resolver cadenas de herencia
+            for _ in range(5):
+                changed = False
+                for sid, data in self.style_map.items():
+                    if data['parent'] and data['parent'] in self.style_map:
+                        parent = self.style_map[data['parent']]
+                        for k, v in parent['rpr'].items():
+                            if k not in data['rpr']:
+                                data['rpr'][k] = v
+                                changed = True
+                        for k, v in parent['ppr'].items():
+                            if k not in data['ppr']:
+                                data['ppr'][k] = v
+                                changed = True
+                if not changed: break
+        except: pass
+
+    def _load_section_props(self):
+        try:
+            with zipfile.ZipFile(self.docx_path, 'r') as z:
+                root = etree.fromstring(z.read('word/document.xml'))
+            
+            sect = root.find('.//w:sectPr', NSMAP)
+            if sect is not None:
+                ns = f'{{{NSMAP["w"]}}}'
+                pgSz = sect.find('w:pgSz', NSMAP)
+                if pgSz is not None:
+                    w = int(pgSz.get(f'{ns}w')) / 1440 
+                    h = int(pgSz.get(f'{ns}h')) / 1440
+                    self.section_props['paper'] = 'A4' if abs(w-8.27)<0.1 and abs(h-11.69)<0.1 else f'{w:.1f}x{h:.1f}'
+                
+                pgMar = sect.find('w:pgMar', NSMAP)
+                if pgMar is not None:
+                    to_cm = lambda x: round(int(x) / 1440 * 2.54, 2)
+                    self.section_props['margin_top'] = to_cm(pgMar.get(f'{ns}top'))
+                    self.section_props['margin_bottom'] = to_cm(pgMar.get(f'{ns}bottom'))
+                    self.section_props['margin_left'] = to_cm(pgMar.get(f'{ns}left'))
+                    self.section_props['margin_right'] = to_cm(pgMar.get(f'{ns}right'))
+        except: pass
+
+    def resolve(self, style_id, explicit_ppr, explicit_rpr=None):
+        res_ppr = {**self.default_ppr}
+        res_rpr = {**self.default_rpr}
+        if style_id and style_id in self.style_map:
+            res_ppr.update(self.style_map[style_id]['ppr'])
+            res_rpr.update(self.style_map[style_id]['rpr'])
+        res_ppr.update(explicit_ppr)
+        if explicit_rpr: res_rpr.update(explicit_rpr)
+        return res_ppr, res_rpr

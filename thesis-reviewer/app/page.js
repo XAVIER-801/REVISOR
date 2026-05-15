@@ -18,6 +18,19 @@ export default function Home() {
   const [error, setError] = useState(null);
   const [activeFilter, setActiveFilter] = useState('all');
   const [showPreview, setShowPreview] = useState(false);
+  const [viewMode, setViewMode] = useState('dashboard'); // 'dashboard', 'table', 'preview'
+
+  const getCategoryStats = () => {
+    if (!results) return [];
+    const categories = [...new Set(results.results.map(r => r.category || 'Otros'))];
+    return categories.map(cat => {
+      const items = results.results.filter(r => r.category === cat);
+      const passed = items.filter(r => r.status === 'passed').length;
+      const total = items.length;
+      const score = Math.round((passed / total) * 100);
+      return { name: cat, score, total, passed, status: score >= 80 ? 'passed' : score >= 50 ? 'warning' : 'error' };
+    });
+  };
 
   const pdfUrl = "/guia.pdf";
 
@@ -210,9 +223,22 @@ export default function Home() {
                    </h2>
                 </div>
              </div>
-             <button onClick={handleDownload} className="btn-crypto">
-                <Download size={20} /> Descargar Reporte Completo
-             </button>
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <div style={{ display: 'flex', background: 'rgba(255,255,255,0.03)', padding: '0.4rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                  <button onClick={() => setViewMode('dashboard')} style={{ padding: '0.6rem 1.2rem', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 800, transition: '0.3s', background: viewMode === 'dashboard' ? 'var(--accent)' : 'transparent', color: viewMode === 'dashboard' ? 'black' : '#94A3B8', border: 'none', cursor: 'pointer' }}>
+                    <BarChart3 size={16} style={{ marginBottom: '-3px', marginRight: '6px' }} /> Dashboard
+                  </button>
+                  <button onClick={() => setViewMode('table')} style={{ padding: '0.6rem 1.2rem', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 800, transition: '0.3s', background: viewMode === 'table' ? 'var(--accent)' : 'transparent', color: viewMode === 'table' ? 'black' : '#94A3B8', border: 'none', cursor: 'pointer' }}>
+                    <Layout size={16} style={{ marginBottom: '-3px', marginRight: '6px' }} /> Tabla
+                  </button>
+                  <button onClick={() => setViewMode('preview')} style={{ padding: '0.6rem 1.2rem', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 800, transition: '0.3s', background: viewMode === 'preview' ? 'var(--accent)' : 'transparent', color: viewMode === 'preview' ? 'black' : '#94A3B8', border: 'none', cursor: 'pointer' }}>
+                    <Eye size={16} style={{ marginBottom: '-3px', marginRight: '6px' }} /> Preview
+                  </button>
+                </div>
+                <button onClick={handleDownload} className="btn-crypto">
+                    <Download size={20} /> Descargar Reporte
+                </button>
+              </div>
           </div>
 
           <div className="grid-audit">
@@ -260,83 +286,175 @@ export default function Home() {
                 </div>
              </aside>
 
-             {/* MAIN CONTENT TABLE */}
-             <div className="main-audit-content">
-                <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
-                   {['all', 'error', 'warning', 'passed'].map((f) => (
-                     <button 
-                       key={f}
-                       onClick={() => setActiveFilter(f)}
-                       style={{ 
-                         padding: '0.7rem 1.5rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)',
-                         fontSize: '0.65rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em',
-                         cursor: 'pointer', transition: '0.3s',
-                         background: activeFilter === f ? 'white' : 'rgba(255,255,255,0.03)',
-                         color: activeFilter === f ? 'black' : '#94A3B8'
-                       }}
-                     >
-                       {f === 'all' ? 'Ver Todos' : f === 'error' ? 'Críticos' : f === 'warning' ? 'Alertas' : 'Correctos'}
-                     </button>
-                   ))}
-                </div>
+              {/* MAIN CONTENT AREA */}
+              <div className="main-audit-content">
+                {viewMode === 'dashboard' && (
+                  <div className="animate-reveal">
+                    <div style={{ marginBottom: '2rem' }}>
+                      <h3 style={{ fontSize: '1.2rem', fontWeight: 900, marginBottom: '0.5rem' }}>Estado por Categorías</h3>
+                      <p style={{ color: '#94A3B8', fontSize: '0.8rem' }}>Análisis detallado del cumplimiento normativo institucional.</p>
+                    </div>
+                    
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
+                      {getCategoryStats().map((cat, i) => (
+                        <div key={i} className="category-card">
+                          <div className="flex-between" style={{ marginBottom: '1rem' }}>
+                            <span style={{ fontWeight: 800, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{cat.name}</span>
+                            <span style={{ fontWeight: 900, fontSize: '1.1rem', color: cat.score >= 80 ? 'var(--success)' : cat.score >= 50 ? 'var(--warning)' : 'var(--error)' }}>{cat.score}%</span>
+                          </div>
+                          <div className="progress-bar-bg">
+                            <div className="progress-bar-fill" style={{ 
+                              width: `${cat.score}%`, 
+                              background: cat.score >= 80 ? 'var(--success)' : cat.score >= 50 ? 'var(--warning)' : 'var(--error)',
+                              boxShadow: `0 0 10px ${cat.score >= 80 ? 'var(--success)' : cat.score >= 50 ? 'var(--warning)' : 'var(--error)'}40`
+                            }}></div>
+                          </div>
+                          <div className="flex-between" style={{ marginTop: '1rem', fontSize: '0.65rem', color: '#64748B', fontWeight: 700 }}>
+                            <span>{cat.passed} de {cat.total} pasados</span>
+                            <span style={{ textTransform: 'uppercase' }}>{cat.score >= 80 ? 'Óptimo' : cat.score >= 50 ? 'Regular' : 'Crítico'}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
 
-                <div className="audit-table-container">
-                   <table className="audit-table">
-                      <thead>
-                         <tr>
-                            <th style={{ width: '50px', textAlign: 'center' }}>#</th>
-                            <th>Regla y Estructura</th>
-                            <th>Estándar Esperado</th>
-                            <th>Valor Detectado</th>
-                            <th style={{ textAlign: 'center' }}>Pág</th>
-                            <th style={{ textAlign: 'right' }}>Estado</th>
-                         </tr>
-                      </thead>
-                      <tbody>
-                         {results.results
-                           .filter(item => activeFilter === 'all' || item.status === activeFilter)
-                           .map((item, idx) => (
-                            <tr key={idx}>
-                               <td style={{ textAlign: 'center', color: '#475569', fontWeight: 800 }}>{idx + 1}</td>
-                               <td>
-                                  <div style={{ fontWeight: 800, marginBottom: '0.25rem', fontSize: '0.9rem' }}>{item.rule}</div>
-                                  <div style={{ fontSize: '0.6rem', color: '#64748B', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                     <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: item.status === 'passed' ? 'var(--success)' : item.status === 'error' ? 'var(--error)' : 'var(--warning)' }}></div>
-                                     {item.category || 'REGLA'}
-                                  </div>
-                               </td>
-                               <td style={{ color: '#94A3B8', fontSize: '0.8rem' }}>{item.expected || '—'}</td>
-                               <td style={{ fontWeight: 700, fontSize: '0.8rem', color: item.status === 'passed' ? 'var(--accent)' : 'var(--text-main)' }}>{item.actual || '—'}</td>
-                               <td style={{ textAlign: 'center' }}>
-                                  {item.paragraphIndex !== undefined ? (
-                                    <span style={{ padding: '0.2rem 0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', fontSize: '0.7rem', color: '#64748B', fontWeight: 800 }}>
-                                       {Math.floor(item.paragraphIndex / 20) + 1}
-                                    </span>
-                                  ) : '—'}
-                               </td>
-                               <td style={{ textAlign: 'right' }}>
-                                  <span className={`badge ${item.status === 'passed' ? 'badge-success' : item.status === 'error' ? 'badge-error' : 'badge-warning'}`}>
-                                     {item.status}
-                                  </span>
-                               </td>
+                    <div className="card-elite" style={{ marginTop: '2.5rem', padding: '2rem' }}>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                          <div style={{ background: 'rgba(69, 245, 229, 0.1)', padding: '1.5rem', borderRadius: '20px' }}>
+                             <TrendingUp size={32} className="text-accent" />
+                          </div>
+                          <div>
+                             <h4 style={{ fontSize: '1.1rem', fontWeight: 900, marginBottom: '0.3rem' }}>Recomendación del Auditor Neural</h4>
+                             <p style={{ color: '#94A3B8', fontSize: '0.85rem', lineHeight: '1.6' }}>
+                                {results.score >= 80 
+                                  ? "Tu tesis cumple con la mayoría de los estándares institucionales. Revisa los detalles menores antes de la entrega final."
+                                  : "Se detectaron inconsistencias críticas en el formato. Te recomendamos usar la función de descarga para ver las anotaciones en Word y corregir los puntos señalados."}
+                             </p>
+                          </div>
+                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {viewMode === 'table' && (
+                  <div className="animate-reveal">
+                    <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
+                      {['all', 'error', 'warning', 'passed'].map((f) => (
+                        <button 
+                          key={f}
+                          onClick={() => setActiveFilter(f)}
+                          style={{ 
+                            padding: '0.7rem 1.5rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)',
+                            fontSize: '0.65rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em',
+                            cursor: 'pointer', transition: '0.3s',
+                            background: activeFilter === f ? 'white' : 'rgba(255,255,255,0.03)',
+                            color: activeFilter === f ? 'black' : '#94A3B8'
+                          }}
+                        >
+                          {f === 'all' ? 'Ver Todos' : f === 'error' ? 'Críticos' : f === 'warning' ? 'Alertas' : 'Correctos'}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="audit-table-container">
+                      <table className="audit-table">
+                          <thead>
+                            <tr>
+                                <th style={{ width: '50px', textAlign: 'center' }}>#</th>
+                                <th>Regla y Estructura</th>
+                                <th>Estándar Esperado</th>
+                                <th>Valor Detectado</th>
+                                <th style={{ textAlign: 'center' }}>Pág</th>
+                                <th style={{ textAlign: 'right' }}>Estado</th>
                             </tr>
-                         ))}
-                      </tbody>
-                   </table>
-                   
-                   {results.results.filter(item => activeFilter === 'all' || item.status === activeFilter).length === 0 && (
-                      <div style={{ padding: '6rem 0', textAlign: 'center', color: '#475569' }}>
-                         <Eye size={48} style={{ opacity: 0.1, marginBottom: '1rem' }} />
-                         <div style={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.7rem' }}>No hay hallazgos con este filtro</div>
-                      </div>
-                   )}
-                </div>
+                          </thead>
+                          <tbody>
+                            {results.results
+                              .filter(item => activeFilter === 'all' || item.status === activeFilter)
+                              .map((item, idx) => (
+                                <tr key={idx}>
+                                  <td style={{ textAlign: 'center', color: '#475569', fontWeight: 800 }}>{idx + 1}</td>
+                                  <td>
+                                      <div style={{ fontWeight: 800, marginBottom: '0.25rem', fontSize: '0.9rem' }}>{item.rule}</div>
+                                      <div style={{ fontSize: '0.6rem', color: '#64748B', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: item.status === 'passed' ? 'var(--success)' : item.status === 'error' ? 'var(--error)' : 'var(--warning)' }}></div>
+                                        {item.category || 'REGLA'}
+                                      </div>
+                                  </td>
+                                  <td style={{ color: '#94A3B8', fontSize: '0.8rem' }}>{item.expected || '—'}</td>
+                                  <td style={{ fontWeight: 700, fontSize: '0.8rem', color: item.status === 'passed' ? 'var(--accent)' : 'var(--text-main)' }}>{item.actual || '—'}</td>
+                                  <td style={{ textAlign: 'center' }}>
+                                      {item.paragraphIndex !== undefined ? (
+                                        <span style={{ padding: '0.2rem 0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', fontSize: '0.7rem', color: '#64748B', fontWeight: 800 }}>
+                                          {Math.floor(item.paragraphIndex / 20) + 1}
+                                        </span>
+                                      ) : '—'}
+                                  </td>
+                                  <td style={{ textAlign: 'right' }}>
+                                      <span className={`badge ${item.status === 'passed' ? 'badge-success' : item.status === 'error' ? 'badge-error' : 'badge-warning'}`}>
+                                        {item.status}
+                                      </span>
+                                  </td>
+                                </tr>
+                            ))}
+                          </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {viewMode === 'preview' && (
+                  <div className="animate-reveal">
+                    <div style={{ marginBottom: '2rem' }}>
+                      <h3 style={{ fontSize: '1.2rem', fontWeight: 900, marginBottom: '0.5rem' }}>Visor de Hallazgos</h3>
+                      <p style={{ color: '#94A3B8', fontSize: '0.8rem' }}>Explora el contexto real de cada observación detectada.</p>
+                    </div>
+
+                    <div className="preview-pane no-scrollbar">
+                      {results.results
+                        .filter(r => r.status !== 'passed' && r.paragraphText)
+                        .map((item, idx) => (
+                          <div key={idx} className={`preview-item status-${item.status}`}>
+                            <div className="flex-between" style={{ marginBottom: '1rem' }}>
+                               <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                                  <div style={{ padding: '0.4rem 0.8rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', fontSize: '0.6rem', fontWeight: 900, color: 'var(--accent)' }}>
+                                     OBS #{(idx + 1).toString().padStart(2, '0')}
+                                  </div>
+                                  <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>{item.rule}</span>
+                               </div>
+                               <span style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: 800 }}>PÁGINA {Math.floor(item.paragraphIndex / 20) + 1}</span>
+                            </div>
+                            
+                            <p style={{ fontSize: '0.8rem', color: '#94A3B8', lineHeight: '1.6', marginBottom: '1rem' }}>
+                               {item.message}
+                            </p>
+
+                            <div className="highlight-box">
+                               <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', color: '#475569', marginBottom: '0.5rem', fontWeight: 800 }}>Fragmento detectado:</div>
+                               "{item.paragraphText}"
+                            </div>
+
+                            <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem' }}>
+                               <div style={{ fontSize: '0.7rem', color: 'var(--error)', fontWeight: 700 }}>ESPERADO: {item.expected}</div>
+                               <div style={{ fontSize: '0.7rem', color: 'white', opacity: 0.5, fontWeight: 700 }}>ACTUAL: {item.actual}</div>
+                            </div>
+                          </div>
+                      ))}
+                      {results.results.filter(r => r.status !== 'passed' && r.paragraphText).length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '10rem 0' }}>
+                           <ShieldCheck size={64} className="text-accent" style={{ opacity: 0.1, margin: '0 auto 2rem' }} />
+                           <h4 style={{ fontWeight: 900, opacity: 0.5 }}>¡Sin observaciones críticas!</h4>
+                           <p style={{ fontSize: '0.8rem', opacity: 0.3 }}>El documento goza de excelente salud técnica.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 
                 <div className="flex-between" style={{ marginTop: '1.5rem', padding: '0 1rem', fontSize: '0.65rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                   <div>Total Validaciones: {results.totalRules}</div>
+                   <div>Total Validaciones: {results.totalRules || results.results.length}</div>
                    <div>v2.0 Sincronizado | © 2025 VRI UNAP</div>
                 </div>
-             </div>
+              </div>
           </div>
        </div>
     </main>

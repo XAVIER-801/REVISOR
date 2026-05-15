@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+python-docx
+python-multipart
+pymupdf
+pandas
+python-dotenv
+lxml
+spacy
+pillow
+# google-generativeai (NO USAR - SEGÚN SOLICITUD DE USUARIO)

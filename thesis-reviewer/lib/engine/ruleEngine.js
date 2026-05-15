@@ -54,6 +54,7 @@ class RuleEngine {
   agregarResultado(resultado) {
     if (resultado.paragraphIndex !== undefined && resultado.paragraphIndex >= 0 && this.paragraphs[resultado.paragraphIndex]) {
       resultado.y = this.paragraphs[resultado.paragraphIndex].y;
+      resultado.paragraphText = this.paragraphs[resultado.paragraphIndex].text;
     }
     this.results.push(resultado);
   }
@@ -170,10 +171,10 @@ class RuleEngine {
       this.agregarResultado({
         id: 'portada-format',
         category: '📑 Portada',
-        rule: 'Formato de Portada (Negrita, Centrado, Sin Sangría)',
+        rule: 'Formato de Portada (Negrita (Bold), Centrado, Sin Sangría)',
         status: (centradoOk === totalEscaneado && negritaOk === totalEscaneado && sinSangriaOk === totalEscaneado) ? 'passed' : 'error',
-        message: `Portada: ${centradoOk}/${totalEscaneado} centrados, ${negritaOk}/${totalEscaneado} negrita, ${sinSangriaOk}/${totalEscaneado} sin sangría.`,
-        expected: 'Centrado, Negrita, Sangría 0',
+        message: `Portada: ${centradoOk}/${totalEscaneado} centrados, ${negritaOk}/${totalEscaneado} negrita (bold), ${sinSangriaOk}/${totalEscaneado} sin sangría.`,
+        expected: 'Centrado, Negrita (Bold), Sangría 0',
         actual: `C:${centradoOk} N:${negritaOk} S:${sinSangriaOk}`,
         paragraphIndex: 0
       });
@@ -247,10 +248,10 @@ class RuleEngine {
           this.agregarResultado({
             id: 'jury-label-style',
             category: '🖋️ Jurados',
-            rule: 'Etiquetas ÁREA/TEMA en Negrita',
+            rule: 'Etiquetas ÁREA/TEMA en Negrita (Bold)',
             status: 'error',
-            message: `La etiqueta "${texto.split(':')[0]}" debe estar en negrita y mayúsculas.`,
-            expected: 'Negrita, Mayúsculas',
+            message: `La etiqueta "${texto.split(':')[0]}" debe estar en negrita (bold) y mayúsculas.`,
+            expected: 'Negrita (Bold), Mayúsculas',
             actual: 'Normal',
             paragraphIndex: i
           });
@@ -284,11 +285,11 @@ class RuleEngine {
     this.agregarResultado({
       id: 'ded-title-format',
       category: '💝 Dedicatoria',
-      rule: 'Título DEDICATORIA (16pt, Negrita, Centrado)',
+      rule: 'Título DEDICATORIA (16pt, Negrita (Bold), Centrado)',
       status: (tamanoTitulo >= 31 && tamanoTitulo <= 33 && esNegrita && esCentrado) ? 'passed' : 'error',
-      message: `Título: ${tamanoTitulo / 2}pt, ${esNegrita ? 'Negrita' : 'Normal'}, ${esCentrado ? 'Centrado' : 'Alineado'}.`,
-      expected: '16pt, Negrita, Centrado',
-      actual: `${tamanoTitulo / 2}pt, ${esNegrita ? 'N' : 'X'}, ${esCentrado ? 'C' : 'X'}`,
+      message: `Título: ${tamanoTitulo / 2}pt, ${esNegrita ? 'Negrita (Bold)' : 'Normal'}, ${esCentrado ? 'Centrado' : 'Alineado'}.`,
+      expected: '16pt, Negrita (Bold), Centrado',
+      actual: `${tamanoTitulo / 2}pt, ${esNegrita ? 'N(B)' : 'X'}, ${esCentrado ? 'C' : 'X'}`,
       paragraphIndex: dedIdx
     });
 
@@ -321,11 +322,11 @@ class RuleEngine {
     this.agregarResultado({
       id: 'agr-title-format',
       category: '🤝 Agradecimientos',
-      rule: 'Título AGRADECIMIENTOS (16pt, Negrita, Centrado)',
+      rule: 'Título AGRADECIMIENTOS (16pt, Negrita (Bold), Centrado)',
       status: (tamanoTitulo >= 31 && tamanoTitulo <= 33 && esNegrita && esCentrado) ? 'passed' : 'error',
-      message: `Título: ${tamanoTitulo / 2}pt, ${esNegrita ? 'Negrita' : 'Normal'}, ${esCentrado ? 'Centrado' : 'Alineado'}.`,
-      expected: '16pt, Negrita, Centrado',
-      actual: `${tamanoTitulo / 2}pt, ${esNegrita ? 'N' : 'X'}, ${esCentrado ? 'C' : 'X'}`,
+      message: `Título: ${tamanoTitulo / 2}pt, ${esNegrita ? 'Negrita (Bold)' : 'Normal'}, ${esCentrado ? 'Centrado' : 'Alineado'}.`,
+      expected: '16pt, Negrita (Bold), Centrado',
+      actual: `${tamanoTitulo / 2}pt, ${esNegrita ? 'N(B)' : 'X'}, ${esCentrado ? 'C' : 'X'}`,
       paragraphIndex: agrIdx
     });
 
@@ -394,11 +395,11 @@ class RuleEngine {
     this.agregarResultado({
       id: 'idx-title-format',
       category: '🗂️ Índice',
-      rule: 'Título ÍNDICE GENERAL (16pt, Negrita, Centrado)',
+      rule: 'Título ÍNDICE GENERAL (16pt, Negrita (Bold), Centrado)',
       status: (tamanoTitulo >= 31 && tamanoTitulo <= 33 && esNegrita && esCentrado) ? 'passed' : 'error',
-      message: `Título: ${tamanoTitulo / 2}pt, ${esNegrita ? 'Negrita' : 'Normal'}, ${esCentrado ? 'Centrado' : 'Alineado'}.`,
-      expected: '16pt, Negrita, Centrado',
-      actual: `${tamanoTitulo / 2}pt, ${esNegrita ? 'N' : 'X'}, ${esCentrado ? 'C' : 'X'}`,
+      message: `Título: ${tamanoTitulo / 2}pt, ${esNegrita ? 'Negrita (Bold)' : 'Normal'}, ${esCentrado ? 'Centrado' : 'Alineado'}.`,
+      expected: '16pt, Negrita (Bold), Centrado',
+      actual: `${tamanoTitulo / 2}pt, ${esNegrita ? 'N(B)' : 'X'}, ${esCentrado ? 'C' : 'X'}`,
       paragraphIndex: idx
     });
 
@@ -419,11 +420,11 @@ class RuleEngine {
       this.agregarResultado({
         id: 'idx-pag-label',
         category: '🗂️ Índice',
-        rule: 'Etiqueta "Pág." (Alineada Derecha, Negrita)',
+        rule: 'Etiqueta "Pág." (Alineada Derecha, Negrita (Bold))',
         status: (pagAlineadaDerecha && pagNegrita) ? 'passed' : 'error',
-        message: `Etiqueta: ${pagNegrita ? 'Negrita' : 'Normal'}, ${pagAlineadaDerecha ? 'Derecha' : 'Izquierda/Centro'}.`,
-        expected: 'Alineación Derecha, Negrita',
-        actual: `${pagAlineadaDerecha ? 'Der' : 'Iz/C'}, ${pagNegrita ? 'N' : 'Norm'}`,
+        message: `Etiqueta: ${pagNegrita ? 'Negrita (Bold)' : 'Normal'}, ${pagAlineadaDerecha ? 'Derecha' : 'Izquierda/Centro'}.`,
+        expected: 'Alineación Derecha, Negrita (Bold)',
+        actual: `${pagAlineadaDerecha ? 'Der' : 'Iz/C'}, ${pagNegrita ? 'N(B)' : 'Norm'}`,
         paragraphIndex: pagIdx
       });
     }
@@ -528,10 +529,10 @@ class RuleEngine {
       this.agregarResultado({
         id: 'idx-chapter-format',
         category: '🗂️ Índice',
-        rule: 'Formato de Capítulos (Centrado, Negrita, Sin Relleno)',
+        rule: 'Formato de Capítulos (Centrado, Negrita (Bold), Sin Relleno)',
         status: chaptersOk === chaptersCount ? 'passed' : 'error',
-        message: `${chaptersOk}/${chaptersCount} capítulos cumplen con el formato requerido.`,
-        expected: 'Centrado, Negrita, Sin Sangría, Sin Relleno',
+        message: `${chaptersOk}/${chaptersCount} capítulos cumplen con el formato requerido (Negrita/Bold).`,
+        expected: 'Centrado, Negrita (Bold), Sin Sangría, Sin Relleno',
         actual: `${chaptersOk} Correctos`,
         paragraphIndex: startEntradas
       });
@@ -584,9 +585,9 @@ class RuleEngine {
             category: '🖋️ Tipografía',
             rule: `Título Nivel 1: ${texto.substring(0, 20)}...`,
             status: 'warning',
-            message: 'Los títulos de Nivel 1 deben ser 12pt y Negrita.',
-            expected: '12pt, Negrita',
-            actual: `${tamanoFuente / 2}pt, ${esNegrita ? 'N' : 'X'}`,
+            message: 'Los títulos de Nivel 1 deben ser 12pt y Negrita (Bold).',
+            expected: '12pt, Negrita (Bold)',
+            actual: `${tamanoFuente / 2}pt, ${esNegrita ? 'N(B)' : 'X'}`,
             paragraphIndex: idx
           });
         }
@@ -621,11 +622,11 @@ class RuleEngine {
       this.agregarResultado({
         id: 'res-bold',
         category: '📝 Resumen',
-        rule: 'Etiqueta en Negrita',
+        rule: 'Etiqueta en Negrita (Bold)',
         status: esNegrita ? 'passed' : 'error',
-        message: 'La etiqueta "Palabras clave:" debe estar en negrita.',
-        expected: 'Negrita',
-        actual: esNegrita ? 'Negrita' : 'Normal',
+        message: 'La etiqueta "Palabras clave:" debe estar en negrita (bold).',
+        expected: 'Negrita (Bold)',
+        actual: esNegrita ? 'Negrita (Bold)' : 'Normal',
         paragraphIndex: kIdx
       });
     }
