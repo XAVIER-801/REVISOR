@@ -47,7 +47,7 @@ class VinetasAuditor(BaseAuditor):
             l_cm = round((p.get('indent_left') or 0) / 567.0, 2)
             h_cm = round((p.get('indent_hanging') or 0) / 567.0, 2)
 
-            is_bullet = ('-' in txt[:3] or '\u2022' in txt[:3] or '' in txt[:3] or '*' in txt[:3] or '•' in txt[:3])
+            is_bullet, is_symbol_ok, detected_symbol = self._check_is_bullet(p, txt)
 
             # Actualizar nivel del título actual
             is_title = p.get('is_heading', False)
@@ -71,6 +71,14 @@ class VinetasAuditor(BaseAuditor):
                 current_sub_bullet_symbol = None
                 continue
 
+            # Si el símbolo no es permitido, solo registrar error y no continuar validación
+            if not is_symbol_ok:
+                self._add("Viñetas", "Símbolo de Viñeta No Permitido", "error",
+                          f"El símbolo '{detected_symbol}' no está permitido. Solo se aceptan: guion (-), punto (•) o numeración alfanumérica.",
+                          "Guion (-), Punto (•) o Numeración alfanumérica", f"Símbolo '{detected_symbol}'",
+                          p_idx=p['index'], p_text=txt)
+                continue
+
             # Determinar si es sub-viñeta
             is_sub_bullet = False
             exp_l_cm = 0.5
@@ -90,7 +98,7 @@ class VinetasAuditor(BaseAuditor):
                 next_p = self.paragraphs[i+1]
                 next_txt = next_p['text'].strip()
                 if next_txt:
-                    next_is_bullet = ('-' in next_txt[:3] or '\u2022' in next_txt[:3] or '' in next_txt[:3] or '*' in next_txt[:3] or '•' in next_txt[:3])
+                    next_is_bullet, _, _ = self._check_is_bullet(next_p, next_txt)
                     if next_is_bullet:
                         is_last_bullet = False
 
@@ -121,12 +129,12 @@ class VinetasAuditor(BaseAuditor):
 
             if is_last_bullet:
                 if abs(s_after - 10.0) > 2.0:
-                    self._add("Viñetas", "Espaciado Posterior Última Viñeta", "warning",
-                              "La última viñeta del bloque debe tener espaciado posterior de 10pt.",
+                    self._add("Viñetas", "Espaciado Posterior Última Viñeta", "error",
+                              "La última viñeta del bloque DEBE tener espaciado posterior de 10pt obligatoriamente.",
                               "10pt", f"{s_after}pt", p_idx=p['index'], p_text=txt)
             else:
                 if s_after > 1.0:
-                    self._add("Viñetas", "Espaciado Posterior Viñeta", "warning",
+                    self._add("Viñetas", "Espaciado Posterior Viñeta", "error",
                               "Las viñetas intermedias deben tener espaciado posterior de 0pt.",
                               "0pt", f"{s_after}pt", p_idx=p['index'], p_text=txt)
 
@@ -161,7 +169,7 @@ class VinetasAuditor(BaseAuditor):
                                   "Izq 3.0cm, Fran 0.75cm", f"{l_part}, {h_part}", p_idx=p['index'], p_text=txt)
 
             # 4. Symbol consistency
-            bullet_char = txt[0]
+            bullet_char = detected_symbol
             if is_sub_bullet:
                 if current_sub_bullet_symbol is None:
                     current_sub_bullet_symbol = bullet_char
@@ -176,3 +184,102 @@ class VinetasAuditor(BaseAuditor):
                     self._add("Viñetas", "Consistencia Símbolo Viñeta", "warning",
                               "Las viñetas deben usar un único tipo de símbolo en toda la lista.",
                               current_bullet_symbol, bullet_char, p_idx=p['index'], p_text=txt)
+
+    def _check_is_bullet(self, p, txt):
+        """
+        Detección ESTRICTA de viñetas. Solo acepta:
+        - Guion: -
+        - Punto: • (bullet)
+        - Alfanuméricos: a), 1), (1), etc.
+
+        RECHAZA explícitamente: ➢, ❑, ✓, ●, ○, y otros símbolos decorativos
+        """
+        txt_strip = txt.strip()
+
+        is_bullet = False
+        is_symbol_ok = True
+        detected_symbol = ''
+
+        # ==================== SÍMBOLOS PERMITIDOS ====================
+        # Solo estos 3 tipos están permitidos según la guía
+        allowed_single_chars = ['-', '•', '*']  # guion, punto, asterisco
+
+        # Conjunto de símbolos PROHIBIDOS (rechaza estos primero)
+        prohibited_symbols = {
+            '➢', '➔', '➤', '→', '⇒',  # Flechas
+            '❑', '■', '□', '◆', '◇', '▲', '▼', '◀', '▶',  # Formas
+            '●', '○', '◎', '◉',  # Círculos
+            '✓', '✔', '✗', '✘',  # Checks
+            '♦', '❖',  # Diamantes
+            '\uf0d8', '\uf0a7', '\uf0fc'  # Códigos Word problemáticos
+        }
+
+        # 1. DETECCIÓN DE VIÑETAS AUTOMÁTICAS DE WORD
+        list_fmt = p.get('list_fmt')
+        list_lvl_text = p.get('list_lvl_text') or ''
+        style_id = p.get('style_id', '').lower()
+
+        is_automatic_bullet = (list_fmt == 'bullet') or any(k in style_id for k in ['bullet', 'viñeta', 'vinet', 'listbullet'])
+
+        if is_automatic_bullet:
+            # Si Word dice que es automática, verificar el símbolo
+            if list_lvl_text:
+                detected_symbol = list_lvl_text[0] if list_lvl_text else '•'
+            else:
+                detected_symbol = txt_strip[0] if txt_strip else '•'
+
+            # RECHAZO EXPLÍCITO de símbolos prohibidos
+            if detected_symbol in prohibited_symbols or ('\ue000' <= detected_symbol <= '\uf8ff'):
+                # Es viñeta automática PERO con símbolo prohibido
+                is_bullet = True
+                is_symbol_ok = False
+                # Estandarizar el símbolo para reportar
+                if detected_symbol in ['➢', '➔', '➤', '\uf0d8', '→', '⇒']:
+                    detected_symbol = '➢'
+                elif detected_symbol in ['❑', '■', '□', '◆', '◇', '\uf0a7']:
+                    detected_symbol = '❑'
+                elif detected_symbol in ['✓', '✔', '\uf0fc']:
+                    detected_symbol = '✓'
+            else:
+                # Símbolo automático permitido
+                is_bullet = True
+                is_symbol_ok = detected_symbol in allowed_single_chars or detected_symbol in ['\u2022', '\u00b7', '\uf0b7']
+
+                if not is_symbol_ok:
+                    # Símbolo automático no reconocido (pero no es prohibido)
+                    is_bullet = False
+        else:
+            # 2. DETECCIÓN DE VIÑETAS ESCRITAS MANUALMENTE (más estricta)
+            if txt_strip:
+                first_char = txt_strip[0]
+                h_cm = round((p.get('indent_hanging') or 0) / 567.0, 2)
+
+                # PRIMERO: Verificar si comienza con símbolo PROHIBIDO
+                if first_char in prohibited_symbols or ('\ue000' <= first_char <= '\uf8ff'):
+                    # NO es viñeta válida, es símbolo prohibido
+                    is_bullet = False
+                    is_symbol_ok = False
+                    detected_symbol = first_char
+                    if first_char in ['➢', '➔', '➤', '→', '⇒', '\uf0d8']:
+                        detected_symbol = '➢'
+                    elif first_char in ['❑', '■', '□', '◆', '◇', '\uf0a7']:
+                        detected_symbol = '❑'
+                    elif first_char in ['✓', '✔', '\uf0fc']:
+                        detected_symbol = '✓'
+                    return is_bullet, is_symbol_ok, detected_symbol
+
+                # SEGUNDO: Detectar viñetas PERMITIDAS
+                # Patrón alfanumérico: a), 1), (a), (1), etc.
+                alphanumeric_match = re.match(r'^(\(?[a-zA-Z0-9]+\)?\.?)\s+', txt_strip)
+                is_alphanumeric = bool(alphanumeric_match)
+
+                # Viñeta con guion o punto
+                is_dash_or_dot = (first_char in allowed_single_chars and len(txt_strip) > 1 and txt_strip[1] in [' ', '\t'])
+
+                # Solo es viñeta si cumple ALGUNA de estas condiciones Y tiene sangría francesa
+                if (is_dash_or_dot or is_alphanumeric) and h_cm > 0.3:
+                    is_bullet = True
+                    is_symbol_ok = True
+                    detected_symbol = first_char if is_dash_or_dot else alphanumeric_match.group(1)[0]
+
+        return is_bullet, is_symbol_ok, detected_symbol

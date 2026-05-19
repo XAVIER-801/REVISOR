@@ -25,10 +25,13 @@ class CapituloNivel1Auditor(BaseAuditor):
 
     def audit(self):
         for i, p in enumerate(self.paragraphs):
-            # Solo párrafos del cuerpo, bajo nivel 1, no en tabla/anexos
+            # Solo párrafos del cuerpo, bajo nivel 1, no en tabla/anexos/referencias
             if not p.get("is_in_body"):
                 continue
             if p.get("body_level") != 1:
+                continue
+            sec_upper = p.get("section", "").upper()
+            if "REFERENCIAS BIBLIOGRAFICAS" in sec_upper or "REFERENCIAS BIBLIOGRÁFICAS" in sec_upper:
                 continue
 
             txt = p['text'].strip()
@@ -55,7 +58,7 @@ class CapituloNivel1Auditor(BaseAuditor):
             is_capitulo = bool(re.match(r"^CAP[ÍI]TULO\s+(I|V|X|L|C|[0-9]+)", norm))
             
             numbering_match = re.match(r'^(\d+(?:\.\d+)+)\.?(?:[\s\t]+|$)', txt.strip())
-            if numbering_match:
+            if numbering_match or (is_title and p.get('level', 1) > 1):
                 es_seccion_principal = False
 
             # ═══ TÍTULO NIVEL 1 ═══
@@ -64,6 +67,20 @@ class CapituloNivel1Auditor(BaseAuditor):
                 ok_bold = bold == True
                 ok_case = txt.upper() == txt
                 ok_indent = abs(l_cm) < 0.1 and abs(f_cm) < 0.1 and abs(h_cm) < 0.1
+
+                # VALIDAR TILDES: "CAPÍTULO" con tilde (obligatorio)
+                has_proper_tilde = True
+                if "CAPITULO" in norm and "CAPÍTULO" not in txt:
+                    has_proper_tilde = False
+                    self._add("Jerarquía", f"Tilde en Capítulo: {txt[:20]}...", "observation",
+                              f"El texto '{txt[:30]}...' debe escribirse 'CAPÍTULO' con tilde, no 'CAPITULO'.",
+                              "CAPÍTULO (con tilde)", "CAPITULO (sin tilde)", p_idx=p['index'], p_text=txt)
+
+                # Validar si hay "TITULO" sin tilde
+                if "TITULO" in norm and "TÍTULO" not in txt:
+                    self._add("Jerarquía", f"Tilde en Título: {txt[:20]}...", "observation",
+                              f"El texto '{txt[:30]}...' debe escribirse 'TÍTULO' con tilde, no 'TITULO'.",
+                              "TÍTULO (con tilde)", "TITULO (sin tilde)", p_idx=p['index'], p_text=txt)
 
                 if not ok_align:
                     self._add("Jerarquía", f"Alineación Capítulo/Nivel 1: {txt[:20]}...", "error",
@@ -84,6 +101,15 @@ class CapituloNivel1Auditor(BaseAuditor):
                     self._add("Jerarquía", f"Sangría Capítulo/Nivel 1: {txt[:20]}...", "error",
                               f"El título de capítulo o nivel 1 '{txt[:30]}...' no debe tener ninguna sangría.",
                               "Sin sangría (0cm)", f"Sangría Izq: {l_cm}cm", p_idx=p['index'], p_text=txt)
+
+                # VALIDAR ESPACIADO POSTERIOR: 5pt después de CAPÍTULO X
+                s_after = p.get('spacing_after', 0)
+                if is_capitulo:
+                    if abs(s_after - 5.0) > 1.0:
+                        self._add("Jerarquía", f"Espaciado Posterior Capítulo: {txt[:20]}...", "error",
+                                  f"Después de 'CAPÍTULO X' debe haber espaciado posterior de 5pt.",
+                                  "5pt", f"{s_after}pt", p_idx=p['index'], p_text=txt)
+
                 continue
 
             # ═══ VIÑETAS bajo Nivel 1 → se auditan en vinetas.py ═══
@@ -125,20 +151,26 @@ class CapituloNivel1Auditor(BaseAuditor):
             s_before = p.get('spacing_before', 0)
             s_after = p.get('spacing_after', 0)
             if s_before > 1.0:
-                self._add("Estructura", "Espaciado Anterior Contenido (Nivel 1)", "warning",
-                          "El contenido bajo nivel 1 debe tener espaciado anterior de 0pt.",
+                self._add("Estructura", "Espaciado Anterior Contenido (Nivel 1)", "error",
+                          "El contenido bajo nivel 1 DEBE tener espaciado anterior de 0pt.",
                           "0pt", f"{s_before}pt", p_idx=p['index'], p_text=txt[:40])
-            if abs(s_after - 10.0) > 2.0:
-                self._add("Estructura", "Espaciado Posterior Contenido (Nivel 1)", "warning",
-                          "El contenido bajo nivel 1 debe tener espaciado posterior de 10pt.",
+            if abs(s_after - 10.0) > 1.0:
+                self._add("Estructura", "Espaciado Posterior Contenido (Nivel 1)", "error",
+                          "El contenido bajo nivel 1 DEBE tener espaciado posterior de 10pt.",
                           "10pt", f"{s_after}pt", p_idx=p['index'], p_text=txt[:40])
 
             # Sangría: Izq 0cm, Primera Línea 1.25cm
             ok_l = abs(l_cm - 0.0) <= 0.1
             ok_f = abs(f_cm - 1.25) <= 0.1
-            l_part = f"Izq {l_cm}cm" if ok_l else f"**Izq {l_cm}cm**"
-            f_part = f"Prim {f_cm}cm" if ok_f else f"**Prim {f_cm}cm**"
             if not ok_l or not ok_f:
-                self._add("Estructura", "Sangría de Contenido (Nivel 1)", "warning",
-                          "El contenido bajo nivel 1 debe tener Sangría Izquierda 0cm y Primera Línea 1.25cm.",
-                          "Izq 0cm, Prim 1.25cm", f"{l_part}, {f_part}", p_idx=p['index'], p_text=txt[:40])
+                req_list = []
+                act_list = []
+                if not ok_l:
+                    req_list.append("Izq 0.0cm")
+                    act_list.append(f"Izq {l_cm}cm")
+                if not ok_f:
+                    req_list.append("Prim 1.25cm")
+                    act_list.append(f"Prim {f_cm}cm")
+                self._add("Estructura", "Sangría de Contenido (Nivel 1)", "error",
+                          "El contenido bajo nivel 1 DEBE tener Sangría Izquierda 0cm y Primera Línea 1.25cm.",
+                          ", ".join(req_list), ", ".join(act_list), p_idx=p['index'], p_text=txt[:40])

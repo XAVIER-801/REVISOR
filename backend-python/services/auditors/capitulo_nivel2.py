@@ -50,7 +50,9 @@ class CapituloNivel2Auditor(BaseAuditor):
             numbering_match = re.match(r'^(\d+(?:\.\d+)+)\.?(?:[\s\t]+|$)', txt.strip())
             numbering_level = numbering_match.group(1).count('.') + 1 if numbering_match else None
 
-            is_nivel2_title = (is_title or (numbering_level == 2)) and numbering_level == 2
+            # Un título es Nivel 2 si tiene numeración manual de nivel 2,
+            # o si es un párrafo de título con body_level == 2.
+            is_nivel2_title = (numbering_level == 2) or (is_title and p.get('body_level') == 2)
 
             # ═══ TÍTULO NIVEL 2 ═══
             if is_nivel2_title:
@@ -60,11 +62,11 @@ class CapituloNivel2Auditor(BaseAuditor):
                               "El título de nivel 2 debe estar en Negrita.",
                               "Negrita", "Normal", p_idx=p['index'], p_text=txt)
 
-                # Alineación
-                if align not in ['both', 'justify']:
+                # Alineación (Justificada o Izquierda son válidas)
+                if align not in ['both', 'justify', 'left']:
                     self._add("Jerarquía", "Alineación Título Nivel 2", "error",
-                              "El título de nivel 2 debe tener alineación justificada.",
-                              "Justificada", align, p_idx=p['index'], p_text=txt)
+                              "El título de nivel 2 debe tener alineación justificada o alineado a la izquierda.",
+                              "Justificada o Izquierda", align, p_idx=p['index'], p_text=txt)
 
                 # Interlineado
                 line_spacing = p.get('line_spacing')
@@ -77,13 +79,19 @@ class CapituloNivel2Auditor(BaseAuditor):
                 s_before = p.get('spacing_before', 0)
                 s_after = p.get('spacing_after', 0)
                 if s_before > 1.0:
-                    self._add("Jerarquía", "Espaciado Anterior Título Nivel 2", "warning",
+                    self._add("Jerarquía", "Espaciado Anterior Título Nivel 2", "error",
                               "El título de nivel 2 debe tener espaciado anterior de 0pt.",
                               "0pt", f"{s_before}pt", p_idx=p['index'], p_text=txt)
-                if abs(s_after - 10.0) > 2.0:
-                    self._add("Jerarquía", "Espaciado Posterior Título Nivel 2", "warning",
+                if abs(s_after - 10.0) > 1.0:
+                    self._add("Jerarquía", "Espaciado Posterior Título Nivel 2", "error",
                               "El título de nivel 2 debe tener espaciado posterior de 10pt.",
                               "10pt", f"{s_after}pt", p_idx=p['index'], p_text=txt)
+
+                # VALIDAR TILDES: "TÍTULO" con tilde (si contiene la palabra)
+                if "TITULO" in norm and "TÍTULO" not in txt:
+                    self._add("Jerarquía", f"Tilde en Título Nivel 2: {txt[:20]}...", "observation",
+                              f"El texto '{txt[:30]}...' debe escribirse 'TÍTULO' con tilde, no 'TITULO'.",
+                              "TÍTULO (con tilde)", "TITULO (sin tilde)", p_idx=p['index'], p_text=txt)
 
                 # Capitalización: MAYÚSCULAS
                 txt_letters = re.sub(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ]', '', txt)
@@ -96,12 +104,18 @@ class CapituloNivel2Auditor(BaseAuditor):
                 exp_l, exp_h = 0.0, 1.25
                 ok_l = abs(l_cm - exp_l) <= 0.15
                 ok_h = abs(h_cm - exp_h) <= 0.15
-                l_part = f"Izq {l_cm}cm" if ok_l else f"**Izq {l_cm}cm**"
-                h_part = f"Fran {h_cm}cm" if ok_h else f"**Fran {h_cm}cm**"
                 if not ok_l or not ok_h:
+                    req_list = []
+                    act_list = []
+                    if not ok_l:
+                        req_list.append(f"Izq {exp_l}cm")
+                        act_list.append(f"Izq {l_cm}cm")
+                    if not ok_h:
+                        req_list.append(f"Fran {exp_h}cm")
+                        act_list.append(f"Fran {h_cm}cm")
                     self._add("Jerarquía", "Sangría Título Nivel 2", "error",
                               f"Nivel 2 debe tener Sangría Izquierda {exp_l}cm y Francesa {exp_h}cm.",
-                              f"Izq {exp_l}cm, Fran {exp_h}cm", f"{l_part}, {h_part}", p_idx=p['index'], p_text=txt)
+                              ", ".join(req_list), ", ".join(act_list), p_idx=p['index'], p_text=txt)
                 continue
 
             # ═══ VIÑETAS → se auditan en vinetas.py ═══
@@ -139,20 +153,26 @@ class CapituloNivel2Auditor(BaseAuditor):
             s_before = p.get('spacing_before', 0)
             s_after = p.get('spacing_after', 0)
             if s_before > 1.0:
-                self._add("Estructura", "Espaciado Anterior Contenido (Nivel 2)", "warning",
-                          "El contenido bajo nivel 2 debe tener espaciado anterior de 0pt.",
+                self._add("Estructura", "Espaciado Anterior Contenido (Nivel 2)", "error",
+                          "El contenido bajo nivel 2 DEBE tener espaciado anterior de 0pt.",
                           "0pt", f"{s_before}pt", p_idx=p['index'], p_text=txt[:40])
-            if abs(s_after - 10.0) > 2.0:
-                self._add("Estructura", "Espaciado Posterior Contenido (Nivel 2)", "warning",
-                          "El contenido bajo nivel 2 debe tener espaciado posterior de 10pt.",
+            if abs(s_after - 10.0) > 1.0:
+                self._add("Estructura", "Espaciado Posterior Contenido (Nivel 2)", "error",
+                          "El contenido bajo nivel 2 DEBE tener espaciado posterior de 10pt.",
                           "10pt", f"{s_after}pt", p_idx=p['index'], p_text=txt[:40])
 
             # Sangría: Izq 0cm, Primera Línea 1.25cm
             ok_l = abs(l_cm - 0.0) <= 0.1
             ok_f = abs(f_cm - 1.25) <= 0.1
-            l_part = f"Izq {l_cm}cm" if ok_l else f"**Izq {l_cm}cm**"
-            f_part = f"Prim {f_cm}cm" if ok_f else f"**Prim {f_cm}cm**"
             if not ok_l or not ok_f:
-                self._add("Estructura", "Sangría de Contenido (Nivel 2)", "warning",
-                          "El contenido bajo nivel 2 debe tener Sangría Izquierda 0cm y Primera Línea 1.25cm.",
-                          "Izq 0cm, Prim 1.25cm", f"{l_part}, {f_part}", p_idx=p['index'], p_text=txt[:40])
+                req_list = []
+                act_list = []
+                if not ok_l:
+                    req_list.append("Izq 0.0cm")
+                    act_list.append(f"Izq {l_cm}cm")
+                if not ok_f:
+                    req_list.append("Prim 1.25cm")
+                    act_list.append(f"Prim {f_cm}cm")
+                self._add("Estructura", "Sangría de Contenido (Nivel 2)", "error",
+                          "El contenido bajo nivel 2 DEBE tener Sangría Izquierda 0cm y Primera Línea 1.25cm.",
+                          ", ".join(req_list), ", ".join(act_list), p_idx=p['index'], p_text=txt[:40])

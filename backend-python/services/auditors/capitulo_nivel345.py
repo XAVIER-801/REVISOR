@@ -66,12 +66,15 @@ class CapituloNivel345Auditor(BaseAuditor):
             numbering_match = re.match(r'^(\d+(?:\.\d+)+)\.?(?:[\s\t]+|$)', txt.strip())
             numbering_level = numbering_match.group(1).count('.') + 1 if numbering_match else None
 
-            is_title_at_level = (is_title or numbering_level is not None) and numbering_level is not None and numbering_level >= 3
+            # Un título es Nivel 3/4/5 si tiene numeración manual >= 3,
+            # o si es un párrafo de título con body_level >= 3.
+            is_title_at_level = (numbering_level is not None and numbering_level >= 3) or (is_title and body_level >= 3)
+            eff_level = numbering_level if numbering_level is not None else body_level
 
             level_label = f"Nivel {body_level}" if body_level <= 5 else "Nivel 5+"
 
             # ═══ TÍTULO NIVEL 3/4/5 ═══
-            if is_title_at_level and numbering_level == body_level:
+            if is_title_at_level and eff_level == body_level:
                 # Negrita
                 if not bold:
                     self._add("Jerarquía", f"Estilo de Fuente Título {level_label}", "error",
@@ -79,10 +82,10 @@ class CapituloNivel345Auditor(BaseAuditor):
                               "Negrita", "Normal", p_idx=p['index'], p_text=txt)
 
                 # Alineación
-                if align not in ['both', 'justify']:
+                if align not in ['both', 'justify', 'left']:
                     self._add("Jerarquía", f"Alineación Título {level_label}", "error",
-                              f"El título de {level_label.lower()} debe tener alineación justificada.",
-                              "Justificada", align, p_idx=p['index'], p_text=txt)
+                              f"El título de {level_label.lower()} debe tener alineación justificada o a la izquierda.",
+                              "Justificada o Izquierda", align, p_idx=p['index'], p_text=txt)
 
                 # Interlineado
                 line_spacing = p.get('line_spacing')
@@ -95,13 +98,19 @@ class CapituloNivel345Auditor(BaseAuditor):
                 s_before = p.get('spacing_before', 0)
                 s_after = p.get('spacing_after', 0)
                 if s_before > 1.0:
-                    self._add("Jerarquía", f"Espaciado Anterior Título {level_label}", "warning",
+                    self._add("Jerarquía", f"Espaciado Anterior Título {level_label}", "error",
                               f"El título de {level_label.lower()} debe tener espaciado anterior de 0pt.",
                               "0pt", f"{s_before}pt", p_idx=p['index'], p_text=txt)
-                if abs(s_after - 10.0) > 2.0:
-                    self._add("Jerarquía", f"Espaciado Posterior Título {level_label}", "warning",
+                if abs(s_after - 10.0) > 1.0:
+                    self._add("Jerarquía", f"Espaciado Posterior Título {level_label}", "error",
                               f"El título de {level_label.lower()} debe tener espaciado posterior de 10pt.",
                               "10pt", f"{s_after}pt", p_idx=p['index'], p_text=txt)
+
+                # VALIDAR TILDES: "TÍTULO" con tilde (si contiene la palabra)
+                if "TITULO" in norm and "TÍTULO" not in txt:
+                    self._add("Jerarquía", f"Tilde en Título {level_label}: {txt[:20]}...", "observation",
+                              f"El texto '{txt[:30]}...' debe escribirse 'TÍTULO' con tilde, no 'TITULO'.",
+                              "TÍTULO (con tilde)", "TITULO (sin tilde)", p_idx=p['index'], p_text=txt)
 
                 # Capitalización: minúsculas (mayúscula inicial)
                 txt_letters = re.sub(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ]', '', txt)
@@ -115,13 +124,19 @@ class CapituloNivel345Auditor(BaseAuditor):
                 exp_l, exp_h = self.INDENT_SPECS.get(effective_level, self.INDENT_SPECS[5])
                 ok_l = abs(l_cm - exp_l) <= 0.15
                 ok_h = abs(h_cm - exp_h) <= 0.15
-                l_part = f"Izq {l_cm}cm" if ok_l else f"**Izq {l_cm}cm**"
-                h_part = f"Fran {h_cm}cm" if ok_h else f"**Fran {h_cm}cm**"
 
                 if not ok_l or not ok_h:
+                    req_list = []
+                    act_list = []
+                    if not ok_l:
+                        req_list.append(f"Izq {exp_l}cm")
+                        act_list.append(f"Izq {l_cm}cm")
+                    if not ok_h:
+                        req_list.append(f"Fran {exp_h}cm")
+                        act_list.append(f"Fran {h_cm}cm")
                     self._add("Jerarquía", f"Sangría Título {level_label}", "error",
                               f"{level_label} debe tener Sangría Izquierda {exp_l}cm y Francesa {exp_h}cm.",
-                              f"Izq {exp_l}cm, Fran {exp_h}cm", f"{l_part}, {h_part}", p_idx=p['index'], p_text=txt)
+                              ", ".join(req_list), ", ".join(act_list), p_idx=p['index'], p_text=txt)
 
                     # Detección de desalineación
                     detected_indent_level = None
@@ -174,12 +189,12 @@ class CapituloNivel345Auditor(BaseAuditor):
             s_before = p.get('spacing_before', 0)
             s_after = p.get('spacing_after', 0)
             if s_before > 1.0:
-                self._add("Estructura", f"Espaciado Anterior Contenido ({level_label})", "warning",
-                          f"El contenido bajo {level_label.lower()} debe tener espaciado anterior de 0pt.",
+                self._add("Estructura", f"Espaciado Anterior Contenido ({level_label})", "error",
+                          f"El contenido bajo {level_label.lower()} DEBE tener espaciado anterior de 0pt.",
                           "0pt", f"{s_before}pt", p_idx=p['index'], p_text=txt[:40])
-            if abs(s_after - 10.0) > 2.0:
-                self._add("Estructura", f"Espaciado Posterior Contenido ({level_label})", "warning",
-                          f"El contenido bajo {level_label.lower()} debe tener espaciado posterior de 10pt.",
+            if abs(s_after - 10.0) > 1.0:
+                self._add("Estructura", f"Espaciado Posterior Contenido ({level_label})", "error",
+                          f"El contenido bajo {level_label.lower()} DEBE tener espaciado posterior de 10pt.",
                           "10pt", f"{s_after}pt", p_idx=p['index'], p_text=txt[:40])
 
             # Sangría del contenido
@@ -187,9 +202,15 @@ class CapituloNivel345Auditor(BaseAuditor):
             exp_l_c, exp_f_c = self.CONTENT_INDENT_SPECS.get(effective_level, self.CONTENT_INDENT_SPECS[5])
             ok_l = abs(l_cm - exp_l_c) <= 0.1
             ok_f = abs(f_cm - exp_f_c) <= 0.1
-            l_part = f"Izq {l_cm}cm" if ok_l else f"**Izq {l_cm}cm**"
-            f_part = f"Prim {f_cm}cm" if ok_f else f"**Prim {f_cm}cm**"
             if not ok_l or not ok_f:
-                self._add("Estructura", f"Sangría de Contenido ({level_label})", "warning",
-                          f"El contenido bajo {level_label.lower()} debe tener Sangría Izquierda {exp_l_c}cm y Primera Línea {exp_f_c}cm.",
-                          f"Izq {exp_l_c}cm, Prim {exp_f_c}cm", f"{l_part}, {f_part}", p_idx=p['index'], p_text=txt[:40])
+                req_list = []
+                act_list = []
+                if not ok_l:
+                    req_list.append(f"Izq {exp_l_c}cm")
+                    act_list.append(f"Izq {l_cm}cm")
+                if not ok_f:
+                    req_list.append(f"Prim {exp_f_c}cm")
+                    act_list.append(f"Prim {f_cm}cm")
+                self._add("Estructura", f"Sangría de Contenido ({level_label})", "error",
+                          f"El contenido bajo {level_label.lower()} DEBE tener Sangría Izquierda {exp_l_c}cm y Primera Línea {exp_f_c}cm.",
+                          ", ".join(req_list), ", ".join(act_list), p_idx=p['index'], p_text=txt[:40])
