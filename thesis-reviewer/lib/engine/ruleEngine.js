@@ -27,7 +27,8 @@ class RuleEngine {
       'verificarFormatoDedicatoria', 'verificarFormatoAgradecimientos', 'verificarFormatoIndiceGeneral',
       'verificarResumen', 'verificarAbstract', 'verificarNumeracionPaginas',
       'verificarIndiceTablas', 'verificarIndiceFiguras', 'verificarIndiceAnexos',
-      'verificarAcronimos', 'verificarEstructuraCapitulos', 'verificarAnexos'
+      'verificarAcronimos', 'verificarEstructuraCapitulos', 'verificarAnexos',
+      'verificarNotasYFuentes'
     ];
 
     v.forEach(m => {
@@ -346,6 +347,25 @@ class RuleEngine {
         actual: `${sangria}`,
         paragraphIndex: this.paragraphs.indexOf(pCuerpo)
       });
+
+      // 3. Extensión (Máximo 1 página / aprox 600 palabras)
+      let totalTexto = "";
+      for (let i = agrIdx; i < this.paragraphs.length; i++) {
+        const text = this.paragraphs[i].text.trim();
+        if (i > agrIdx && (text.toUpperCase().includes("RESUMEN") || text.toUpperCase().includes("INDICE GENERAL"))) break;
+        totalTexto += " " + text;
+      }
+      const conteo = totalTexto.split(/\s+/).length;
+      this.agregarResultado({
+        id: 'agr-max-page',
+        category: '🤝 Agradecimientos',
+        rule: 'Extensión Máxima (1 Página)',
+        status: conteo <= 600 ? 'passed' : 'error',
+        message: conteo <= 600 ? 'Los agradecimientos caben en una sola página.' : 'Los agradecimientos exceden el límite de una página.',
+        expected: 'Máx 1 pág (~600 palabras)',
+        actual: `${conteo} palabras`,
+        paragraphIndex: agrIdx
+      });
     }
 
     // 3. Firmas
@@ -412,6 +432,118 @@ class RuleEngine {
       }
     }
 
+    // 3. Validar entradas del índice
+    const startEntradas = pagIdx !== -1 ? pagIdx + 1 : idx + 1;
+    const seccionesEnIndice = [];
+
+    for (let i = startEntradas; i < this.paragraphs.length; i++) {
+      const p = this.paragraphs[i];
+      const text = p.text.trim();
+      const upper = text.toUpperCase();
+      
+      // Detenerse si empezamos otra sección mayor (fuera del índice)
+      if (i > idx + 50 && (upper === "RESUMEN" || upper === "INTRODUCCIÓN" || upper === "INTRODUCCION")) break;
+      if (text.length < 3) continue;
+
+      seccionesEnIndice.push(upper);
+
+      // Regla de alineación
+      const esCapitulo = /^CAP[ÍI]TULO\s+[IVXLC0-9]+/i.test(text);
+      const nombresCapitulosEstandar = [
+        'INTRODUCCION', 'INTRODUCCIÓN',
+        'REVISION DE LITERATURA', 'REVISIÓN DE LITERATURA',
+        'MATERIALES Y METODOS', 'MATERIALES Y MÉTODOS',
+        'RESULTADOS Y DISCUSION', 'RESULTADOS Y DISCUSIÓN'
+      ];
+      
+      let eraCapituloPrevio = false;
+      for (let prevIdx = i - 1; prevIdx >= startEntradas; prevIdx--) {
+        const prevText = this.paragraphs[prevIdx].text.trim();
+        if (prevText) {
+          if (/^CAP[ÍI]TULO\s+[IVXLC0-9]+/i.test(prevText)) {
+            eraCapituloPrevio = true;
+          }
+          break;
+        }
+      }
+      
+      const hasDotsOrPage = text.includes('....') || /\d+$/.test(text);
+      const esTituloCapitulo = nombresCapitulosEstandar.includes(upper) || (eraCapituloPrevio && !hasDotsOrPage);
+      const align = p.properties?.alignment || 'left';
+
+      // --- NUEVO: Validar "Pág." label ---
+      if (/^P[ÁA]G\.?$/i.test(text)) {
+        const pagAlineadaDerecha = align === 'right' || p.startX > 400;
+        const pagNegrita = p.runs?.some(r => r.properties?.bold);
+        this.agregarResultado({
+          id: `idx-pag-label-${i}`,
+          category: '🗂️ Índice',
+          rule: 'Etiqueta "Pág." (Alineada Derecha, Negrita (Bold))',
+          status: (pagAlineadaDerecha && pagNegrita) ? 'passed' : 'error',
+          message: `Etiqueta: ${pagNegrita ? 'Negrita (Bold)' : 'Normal'}, ${pagAlineadaDerecha ? 'Derecha' : 'Izquierda/Centro'}.`,
+          expected: 'Alineación Derecha, Negrita (Bold)',
+          actual: `${pagAlineadaDerecha ? 'Der' : 'Iz/C'}, ${pagNegrita ? 'N(B)' : 'Norm'}`,
+          paragraphIndex: i
+        });
+        continue;
+      }
+
+      if (esCapitulo || esTituloCapitulo) {
+        this.agregarResultado({
+          id: `idx-cap-align-${i}`,
+          category: '🗂️ Índice',
+          rule: `Alineación de ${text.substring(0, 15)}`,
+          status: align === 'center' ? 'passed' : 'error',
+          message: `La línea '${text.substring(0, 20)}...' en el índice debe estar centrada.`,
+          expected: 'Centrado',
+          actual: align,
+          paragraphIndex: i
+        });
+      } else if (text.includes('....') || /\d+$/.test(text)) {
+        // Otros ítems con número de página
+        this.agregarResultado({
+          id: `idx-item-align-${i}`,
+          category: '🗂️ Índice',
+          rule: `Alineación de entrada: ${text.substring(0, 15)}`,
+          status: (align === 'both' || align === 'justify') ? 'passed' : 'error',
+          message: 'Las entradas de contenido en el índice deben estar justificadas.',
+          expected: 'Justificado',
+          actual: align,
+          paragraphIndex: i
+        });
+      }
+    }
+
+    // 4. Cross-Check de secciones
+    const dedicatoriaDoc = this.paragraphs.some(p => p.text.toUpperCase().includes('DEDICATORIA'));
+    const agradecimientosDoc = this.paragraphs.some(p => p.text.toUpperCase().includes('AGRADECIMIENTOS'));
+
+    if (dedicatoriaDoc && !seccionesEnIndice.some(s => s.includes('DEDICATORIA'))) {
+      this.agregarResultado({
+        id: 'idx-missing-ded',
+        category: '🗂️ Índice',
+        rule: 'Presencia de Dedicatoria',
+        status: 'error',
+        message: 'La Dedicatoria existe en el documento pero no figura en el Índice.',
+        expected: 'Presente en Índice',
+        actual: 'Ausente',
+        paragraphIndex: idx
+      });
+    }
+
+    if (agradecimientosDoc && !seccionesEnIndice.some(s => s.includes('AGRADECIMIENTOS'))) {
+      this.agregarResultado({
+        id: 'idx-missing-agr',
+        category: '🗂️ Índice',
+        rule: 'Presencia de Agradecimientos',
+        status: 'error',
+        message: 'Los Agradecimientos existen en el documento pero no figuran en el Índice.',
+        expected: 'Presente en Índice',
+        actual: 'Ausente',
+        paragraphIndex: idx
+      });
+    }
+
     if (pagIdx !== -1) {
       const pPag = this.paragraphs[pagIdx];
       const pagAlineadaDerecha = pPag.properties?.alignment === 'right' || pPag.startX > 400; // Tolerancia en PDF
@@ -431,7 +563,7 @@ class RuleEngine {
 
     // 3. Entradas Preliminares (DEDICATORIA... ACRÓNIMOS)
     let preEntradas = 0, sinNumeracionOk = 0, tamano12Ok = 0, sinRellenoOk = 0;
-    const startEntradas = pagIdx !== -1 ? pagIdx + 1 : idx + 1;
+    const startEntradas2 = pagIdx !== -1 ? pagIdx + 1 : idx + 1;
 
     let indexBodyLines = 0;
     let chaptersOk = 0, chaptersCount = 0;
@@ -440,14 +572,14 @@ class RuleEngine {
     let level4Ok = 0, level4Count = 0;
     let finalesOk = 0, finalesCount = 0;
 
-    for (let i = startEntradas; i < this.paragraphs.length; i++) {
+    for (let i = startEntradas2; i < this.paragraphs.length; i++) {
       const p = this.paragraphs[i];
       const text = p.text.trim().toUpperCase();
 
       // Detenerse si pasamos al contenido real (ÍNDICE DE TABLAS u otra sección nueva no perteneciente al índice)
       // Como el índice puede ser largo, usamos heurísticas de números de página al final
       const hasPageNum = /\d+$/.test(text) || /\.\s*\d+/.test(text);
-      const isChapterHeader = text.startsWith('CAPÍTULO');
+      const isChapterHeader = text.startsWith('CAPÍTULO') || text.startsWith('CAPITULO');
       const isPrelim = ['DEDICATORIA', 'AGRADECIMIENTOS', 'ÍNDICE DE TABLAS', 'ÍNDICE DE FIGURAS', 'ÍNDICE DE ANEXOS', 'ACRÓNIMOS', 'RESUMEN', 'ABSTRACT'].some(k => text.includes(k));
       const isFinal = ['V. CONCLUSIONES', 'VI. RECOMENDACIONES', 'VII. REFERENCIAS BIBLIOGRÁFICAS', 'ANEXOS'].some(k => text.includes(k));
 
@@ -479,13 +611,13 @@ class RuleEngine {
         chaptersCount++;
         const isCentered = p.properties?.alignment === 'center';
         const hasNoFill = !text.includes('...');
-        if (isCentered && isBold && hasNoFill && indentLeft === 0) chaptersOk++;
+        if (isCentered && isBold && hasNoFill) chaptersOk++;
       }
 
       // --- VALIDACIÓN DE FINALES (V, VI, VII, ANEXOS) ---
       else if (isFinal) {
         finalesCount++;
-        if (indentLeft === 0) finalesOk++; // La alineación justificada es estándar, verificamos sangría 0
+        finalesOk++;
       }
 
       // --- VALIDACIÓN DE NIVELES JERÁRQUICOS (Nivel 2, 3, 4, 5) ---
@@ -497,16 +629,16 @@ class RuleEngine {
 
           if (level === 2) {
             level2Count++;
-            // Nivel 2: Negrita, Mayúsculas, Sangría Izq 0cm, Francesa 1.25cm (aprox 708 twips)
-            if (isBold && isUpper && indentLeft < 100 && hangingIndent > 500) level2Ok++;
+            // Nivel 2: Negrita, Mayúsculas
+            if (isBold && isUpper) level2Ok++;
           } else if (level === 3) {
             level3Count++;
-            // Nivel 3: Sin negrita, Minúsculas (excepto primera letra), Sangría Izq 1.25cm (708 twips), Francesa 1.25cm
-            if (!isBold && !isUpper && indentLeft > 500 && hangingIndent > 500) level3Ok++;
+            // Nivel 3: Sin negrita, Minúsculas (excepto primera letra)
+            if (!isBold && !isUpper) level3Ok++;
           } else if (level >= 4) {
             level4Count++;
-            // Nivel 4 y 5: Sin negrita, Minúsculas, Sangría Izq 2.5cm (aprox 1417 twips), Francesa 1.5cm (aprox 850 twips)
-            if (!isBold && !isUpper && indentLeft > 1000 && hangingIndent > 500) level4Ok++;
+            // Nivel 4 y 5: Sin negrita, Minúsculas
+            if (!isBold && !isUpper) level4Ok++;
           }
         }
       }
@@ -521,7 +653,7 @@ class RuleEngine {
         message: `Detectadas ${preEntradas} entradas. ${tamano12Ok} en 12pt, ${sinNumeracionOk} sin numerar, ${sinRellenoOk} sin puntos.`,
         expected: '12pt, Sin Num, Sin Puntos',
         actual: `12pt:${tamano12Ok}, SinNum:${sinNumeracionOk}`,
-        paragraphIndex: startEntradas
+        paragraphIndex: startEntradas2
       });
     }
 
@@ -532,9 +664,9 @@ class RuleEngine {
         rule: 'Formato de Capítulos (Centrado, Negrita (Bold), Sin Relleno)',
         status: chaptersOk === chaptersCount ? 'passed' : 'error',
         message: `${chaptersOk}/${chaptersCount} capítulos cumplen con el formato requerido (Negrita/Bold).`,
-        expected: 'Centrado, Negrita (Bold), Sin Sangría, Sin Relleno',
+        expected: 'Centrado, Negrita (Bold), Sin Relleno',
         actual: `${chaptersOk} Correctos`,
-        paragraphIndex: startEntradas
+        paragraphIndex: startEntradas2
       });
     }
 
@@ -545,12 +677,12 @@ class RuleEngine {
       this.agregarResultado({
         id: 'idx-levels-format',
         category: '🗂️ Índice',
-        rule: 'Jerarquía Tipográfica de Niveles (Sangrías, Negritas, Mayúsculas)',
+        rule: 'Jerarquía Tipográfica de Niveles (Estilos, Negritas, Mayúsculas)',
         status: totalLevelsOk === totalLevels ? 'passed' : 'warning',
-        message: `Nivel 2: ${level2Ok}/${level2Count} | Nivel 3: ${level3Ok}/${level3Count} | Nivel 4+: ${level4Ok}/${level4Count}. Se valida sangría izquierda, francesa y estilos.`,
-        expected: 'Sangrías y Estilos según Nivel',
+        message: `Nivel 2: ${level2Ok}/${level2Count} | Nivel 3: ${level3Ok}/${level3Count} | Nivel 4+: ${level4Ok}/${level4Count}. Se valida la capitalización y los estilos tipográficos correspondientes.`,
+        expected: 'Estilos según Nivel (Mayúsculas/Minúsculas, Negritas)',
         actual: `${totalLevelsOk}/${totalLevels} Correctos`,
-        paragraphIndex: startEntradas
+        paragraphIndex: startEntradas2
       });
     }
 
@@ -560,10 +692,10 @@ class RuleEngine {
         category: '🗂️ Índice',
         rule: 'Secciones Finales (V, VI, VII, ANEXOS)',
         status: finalesOk === finalesCount ? 'passed' : 'error',
-        message: `${finalesOk}/${finalesCount} secciones finales no tienen sangría.`,
-        expected: 'Sin Sangría',
+        message: `${finalesOk}/${finalesCount} secciones finales analizadas correctamente.`,
+        expected: 'Secciones Finales Presentes',
         actual: `${finalesOk} Correctos`,
-        paragraphIndex: startEntradas
+        paragraphIndex: startEntradas2
       });
     }
   }
@@ -689,7 +821,7 @@ class RuleEngine {
       id: id,
       category: category,
       rule: rule,
-      status: (conteoPalabras >= 200 && conteoPalabras <= 300) ? 'passed' : 'warning',
+      status: (conteoPalabras >= 250 && conteoPalabras <= 300) ? 'passed' : 'error',
       message: `El bloque tiene ${conteoPalabras} palabras. (Fidelity-Matched Word Count).`,
       expected: expected,
       actual: `${conteoPalabras} palabras`,
@@ -732,7 +864,7 @@ class RuleEngine {
       id: 'indent-1.25',
       category: '🖋️ Formato',
       rule: 'Sangría 1.25 cm',
-      status: porcentaje > 50 ? 'passed' : 'warning',
+      status: porcentaje > 50 ? 'passed' : 'error',
       message: porcentaje > 50 ? 'Sangría reglamentaria detectada.' : 'Muchos párrafos carecen de la sangría de 1.25 cm reglamentaria.',
       expected: '1.25 cm',
       actual: porcentaje > 50 ? 'Consistente' : 'Inconsistente'
@@ -1426,6 +1558,7 @@ class RuleEngine {
       const alineacion = p.properties?.alignment || 'left';
       const esJustificado = alineacion === 'both' || alineacion === 'justify';
       const esCentrado = alineacion === 'center';
+      const esAlineacionValida = esJustificado || alineacion === 'left';
 
       const leftIndent = p.properties?.indent || 0;
       const hangingIndent = p.properties?.hangingIndent || 0;
@@ -1467,8 +1600,48 @@ class RuleEngine {
         const leftOk = leftIndent > 1300 && leftIndent < 1550; // ~2.5cm = 1417 twips
         const hangOk = hangingIndent > 750 && hangingIndent < 950; // ~1.5cm = 850 twips
 
-        if (tamano >= 23 && tamano <= 25 && esNegrita && esJustificado && leftOk && hangOk && noEsMayuscula) {
+        if (tamano >= 23 && tamano <= 25 && esNegrita && esAlineacionValida && leftOk && hangOk && noEsMayuscula) {
           lvl4_5Ok++;
+        } else {
+          // Reportar errores individuales específicos de Nivel 4/5
+          if (!leftOk || !hangOk) {
+            const lCm = (leftIndent / 567).toFixed(2);
+            const hCm = (hangingIndent / 567).toFixed(2);
+            this.agregarResultado({
+              id: `sangria-lvl4_5-${i}`,
+              category: '📘 Niveles Subordinados',
+              rule: `Sangría Título Nivel 4/5: ${text.substring(0, 20)}...`,
+              status: 'error',
+              message: `El título de Nivel 4/5 '${text}' debe tener Sangría Izquierda 2.5cm y Francesa 1.50cm.`,
+              expected: 'Izq 2.5cm, Fran 1.50cm',
+              actual: `Izq ${lCm}cm, Fran ${hCm}cm`,
+              paragraphIndex: i
+            });
+          }
+          if (!esAlineacionValida) {
+            this.agregarResultado({
+              id: `format-lvl4_5-align-${i}`,
+              category: '📘 Niveles Subordinados',
+              rule: `Alineación Título Nivel 4/5: ${text.substring(0, 20)}...`,
+              status: 'error',
+              message: `El título de Nivel 4/5 '${text}' debe estar Justificado o Alineado a la Izquierda.`,
+              expected: 'Justificado o Izquierda',
+              actual: alineacion,
+              paragraphIndex: i
+            });
+          }
+          if (!esNegrita) {
+            this.agregarResultado({
+              id: `format-lvl4_5-bold-${i}`,
+              category: '📘 Niveles Subordinados',
+              rule: `Estilo Título Nivel 4/5: ${text.substring(0, 20)}...`,
+              status: 'error',
+              message: `El título de Nivel 4/5 '${text}' debe estar en Negrita.`,
+              expected: 'Negrita',
+              actual: 'Normal',
+              paragraphIndex: i
+            });
+          }
         }
       } else if (regexNivel3.test(text)) {
         currentLevel = 3;
@@ -1478,8 +1651,48 @@ class RuleEngine {
         const leftOk = leftIndent > 600 && leftIndent < 850; // ~1.25cm = 708 twips
         const hangOk = hangingIndent > 600 && hangingIndent < 850;
 
-        if (tamano >= 23 && tamano <= 25 && esNegrita && esJustificado && leftOk && hangOk && noEsMayuscula) {
+        if (tamano >= 23 && tamano <= 25 && esNegrita && esAlineacionValida && leftOk && hangOk && noEsMayuscula) {
           lvl3Ok++;
+        } else {
+          // Reportar errores individuales específicos de Nivel 3
+          if (!leftOk || !hangOk) {
+            const lCm = (leftIndent / 567).toFixed(2);
+            const hCm = (hangingIndent / 567).toFixed(2);
+            this.agregarResultado({
+              id: `sangria-lvl3-${i}`,
+              category: '📘 Niveles Subordinados',
+              rule: `Sangría Título Nivel 3: ${text.substring(0, 20)}...`,
+              status: 'error',
+              message: `El título de Nivel 3 '${text}' debe tener Sangría Izquierda 1.25cm y Francesa 1.25cm.`,
+              expected: 'Izq 1.25cm, Fran 1.25cm',
+              actual: `Izq ${lCm}cm, Fran ${hCm}cm`,
+              paragraphIndex: i
+            });
+          }
+          if (!esAlineacionValida) {
+            this.agregarResultado({
+              id: `format-lvl3-align-${i}`,
+              category: '📘 Niveles Subordinados',
+              rule: `Alineación Título Nivel 3: ${text.substring(0, 20)}...`,
+              status: 'error',
+              message: `El título de Nivel 3 '${text}' debe estar Justificado o Alineado a la Izquierda.`,
+              expected: 'Justificado o Izquierda',
+              actual: alineacion,
+              paragraphIndex: i
+            });
+          }
+          if (!esNegrita) {
+            this.agregarResultado({
+              id: `format-lvl3-bold-${i}`,
+              category: '📘 Niveles Subordinados',
+              rule: `Estilo Título Nivel 3: ${text.substring(0, 20)}...`,
+              status: 'error',
+              message: `El título de Nivel 3 '${text}' debe estar en Negrita.`,
+              expected: 'Negrita',
+              actual: 'Normal',
+              paragraphIndex: i
+            });
+          }
         }
       } else if (regexNivel2.test(text)) {
         currentLevel = 2;
@@ -1489,8 +1702,48 @@ class RuleEngine {
         const leftOk = leftIndent < 100;
         const hangOk = hangingIndent > 600 && hangingIndent < 850;
 
-        if (tamano >= 23 && tamano <= 25 && esNegrita && esJustificado && leftOk && hangOk && esMayuscula) {
+        if (tamano >= 23 && tamano <= 25 && esNegrita && esAlineacionValida && leftOk && hangOk && esMayuscula) {
           lvl2Ok++;
+        } else {
+          // Reportar errores individuales específicos de Nivel 2
+          if (!leftOk || !hangOk) {
+            const lCm = (leftIndent / 567).toFixed(2);
+            const hCm = (hangingIndent / 567).toFixed(2);
+            this.agregarResultado({
+              id: `sangria-lvl2-${i}`,
+              category: '📘 Niveles Subordinados',
+              rule: `Sangría Título Nivel 2: ${text.substring(0, 20)}...`,
+              status: 'error',
+              message: `El título de Nivel 2 '${text}' debe tener Sangría Izquierda 0cm y Francesa 1.25cm.`,
+              expected: 'Izq 0cm, Fran 1.25cm',
+              actual: `Izq ${lCm}cm, Fran ${hCm}cm`,
+              paragraphIndex: i
+            });
+          }
+          if (!esAlineacionValida) {
+            this.agregarResultado({
+              id: `format-lvl2-align-${i}`,
+              category: '📘 Niveles Subordinados',
+              rule: `Alineación Título Nivel 2: ${text.substring(0, 20)}...`,
+              status: 'error',
+              message: `El título de Nivel 2 '${text}' debe estar Justificado o Alineado a la Izquierda.`,
+              expected: 'Justificado o Izquierda',
+              actual: alineacion,
+              paragraphIndex: i
+            });
+          }
+          if (!esNegrita) {
+            this.agregarResultado({
+              id: `format-lvl2-bold-${i}`,
+              category: '📘 Niveles Subordinados',
+              rule: `Estilo Título Nivel 2: ${text.substring(0, 20)}...`,
+              status: 'error',
+              message: `El título de Nivel 2 '${text}' debe estar en Negrita.`,
+              expected: 'Negrita',
+              actual: 'Normal',
+              paragraphIndex: i
+            });
+          }
         }
       } else if (currentLevel === 0 && text === text.toUpperCase() && tamano >= 27) {
         // Título de Nivel 1 detectado
@@ -1563,6 +1816,40 @@ class RuleEngine {
           if (isTabla) tablesOk++; else figuresOk++;
         }
         expectingTitleFor = isTabla ? 'tabla' : 'figura';
+
+        // --- NUEVO: Verificar presencia de Nota o Fuente para esta Tabla/Figura ---
+        let encontroNotaFuente = false;
+        for (let j = i + 1; j < Math.min(i + 150, this.paragraphs.length); j++) {
+          const pNext = this.paragraphs[j];
+          const nextTxt = pNext.text.trim();
+          const nextUpper = nextTxt.toUpperCase();
+
+          if (regexTabla.test(nextTxt) || 
+              regexFigura.test(nextTxt) || 
+              /^CAP[ÍI]TULO\s+/i.test(nextTxt) || 
+              /^\d+(\.\d+)*\.?\s+[A-Z]/i.test(nextTxt) ||
+              ["INTRODUCCION", "INTRODUCCIÓN", "RESUMEN", "ABSTRACT", "CONCLUSIONES", "RECOMENDACIONES", "REFERENCIAS BIBLIOGRÁFICAS", "ANEXOS"].includes(nextUpper)) {
+            break;
+          }
+
+          if (/^(Nota|Fuente):/i.test(nextTxt)) {
+            encontroNotaFuente = true;
+            break;
+          }
+        }
+
+        if (!encontroNotaFuente) {
+          this.agregarResultado({
+            id: `missing-note-source-${i}`,
+            category: '📊 Tablas/Figuras',
+            rule: `Nota/Fuente Obligatoria: ${text.substring(0, 15)}`,
+            status: 'error',
+            message: `No se encontró la nota o fuente obligatoria para la ${isTabla ? 'tabla' : 'figura'} '${text}'. Toda tabla y figura debe incluir su correspondiente Nota o Fuente debajo.`,
+            expected: 'Nota: o Fuente: debajo',
+            actual: 'Ausente',
+            paragraphIndex: i
+          });
+        }
       } else if (/^(Nota|Fuente):/i.test(text)) {
         notesTotal++;
         let expectedIndent = 0;
@@ -1993,10 +2280,11 @@ class RuleEngine {
 
   verificarAnexos() {
     let anexosIdx = -1;
-    // Buscar la sección de ANEXOS (puede o no tener numeración romana)
+    // Buscar la sección de ANEXOS
     for (let i = 0; i < this.paragraphs.length; i++) {
       const text = this.paragraphs[i].text.trim();
-      if (/^(VIII\.\s+)?ANEXOS$/i.test(text)) {
+      const norm = (this.paragraphs[i].normText || "");
+      if (norm === "ANEXOS") {
         anexosIdx = i;
         break;
       }
@@ -2005,12 +2293,12 @@ class RuleEngine {
     if (anexosIdx === -1) {
       this.agregarResultado({
         id: 'anexos-format',
-        category: '📎 Anexos y Documentos',
-        rule: 'Detección de Sección de Anexos',
+        category: '📎 Anexos',
+        rule: "Título Principal 'ANEXOS'",
         status: 'error',
-        message: 'No se encontró el título principal "ANEXOS".',
-        expected: 'Título "ANEXOS" presente al final del documento',
-        actual: 'No detectado',
+        message: "No se encontró la sección o el título principal 'ANEXOS' de tamaño 16pt, centrado y en negrita.",
+        expected: 'Presente',
+        actual: 'No identificado',
         paragraphIndex: -1
       });
       return;
@@ -2023,69 +2311,259 @@ class RuleEngine {
 
     const titleOk = tamano >= 31 && tamano <= 33 && esNegrita && esCentrado;
 
-    let anexosDetectados = 0;
-    let anexosFormatoOk = 0;
+    this.agregarResultado({
+      id: 'anexos-main-title-format',
+      category: '📎 Anexos',
+      rule: "Título Principal 'ANEXOS'",
+      status: titleOk ? 'passed' : 'error',
+      message: "El título 'ANEXOS' debe ser de tamaño 16pt, centrado y en negrita.",
+      expected: '16pt, Centrado, Negrita',
+      actual: `${(tamano/2).toFixed(1)}pt, ${pTitle.properties?.alignment || 'left'}, ${esNegrita ? 'Negrita' : 'Normal'}`,
+      paragraphIndex: anexosIdx
+    });
 
-    // Flags para documentos obligatorios (que suelen estar escaneados)
+    let foundAnnexTitles = [];
     let tieneDeclaracionJurada = false;
     let tieneAutorizacionDeposito = false;
 
     for (let i = anexosIdx + 1; i < this.paragraphs.length; i++) {
       const p = this.paragraphs[i];
       const text = p.text.trim();
+      if (text.length === 0 || p.properties?.inTable) continue;
 
-      if (text.length === 0) continue;
-
-      // Buscar menciones de documentos obligatorios en texto plano
       if (/DECLARACI[ÓO]N\s+JURADA\s+DE\s+AUTENTICIDAD/i.test(text)) tieneDeclaracionJurada = true;
       if (/AUTORIZACI[ÓO]N\s+PARA\s+EL\s+DEP[ÓO]SITO/i.test(text)) tieneAutorizacionDeposito = true;
 
-      // Evaluar formato secuencial: "Anexo 1. Título..."
-      const matchAnexo = text.match(/^Anexo\s+(\d+)\.(.*)/i);
-      if (matchAnexo) {
-        anexosDetectados++;
-        const pTamano = p.runs?.[0]?.properties?.fontSize || 0;
-        const isLeftAligned = p.properties?.alignment === 'left' || (!p.properties?.alignment);
+      const pTamano = p.runs?.[0]?.properties?.fontSize || 0;
+      const align = p.properties?.alignment || 'left';
+      
+      const leftIndent = p.properties?.indent || 0;
+      const firstLineIndent = p.properties?.firstLineIndent || 0;
+      const hangingIndent = p.properties?.hangingIndent || 0;
 
-        // La regla pide que "Anexo X." sea Negrita, pero el título a continuación sea Normal
-        // Como esto es mixto en un solo párrafo, verificaremos las reglas generales del contenedor
-        const leftIndent = p.properties?.indent || 0;
+      const lCm = (leftIndent / 567).toFixed(2);
+      const fCm = (firstLineIndent / 567).toFixed(2);
+      const hCm = (hangingIndent / 567).toFixed(2);
 
-        if (pTamano >= 23 && pTamano <= 25 && isLeftAligned && leftIndent < 100) {
-          anexosFormatoOk++;
+      const annexMatch = text.match(/^Anexo\s+(\d+)(?:\.\s*|\s+\.\s*|\s+)(.*)/i);
+      
+      if (annexMatch) {
+        const num = parseInt(annexMatch[1]);
+        const titleTxt = annexMatch[2].trim();
+        foundAnnexTitles.push(num);
+
+        // A. Validar que la etiqueta "Anexo X" tenga un punto "." después del número
+        const hasDot = /^Anexo\s+\d+\./i.test(text);
+        if (!hasDot) {
+          this.agregarResultado({
+            id: `anexo-dot-${i}`,
+            category: '📎 Anexos',
+            rule: `Formato Anexo ${num}`,
+            status: 'error',
+            message: `La etiqueta 'Anexo {num}' debe estar seguida por un punto (.) y un espacio.`,
+            expected: `Anexo ${num}.`,
+            actual: text.substring(0, 25),
+            paragraphIndex: i
+          });
+        }
+
+        // B. Secuencia
+        const expectedNum = foundAnnexTitles.length;
+        if (num !== expectedNum) {
+          this.agregarResultado({
+            id: `anexo-seq-${i}`,
+            category: '📎 Anexos',
+            rule: `Secuencia Anexo ${num}`,
+            status: 'error',
+            message: `La numeración de los anexos debe ser secuencial (Anexo 1, Anexo 2...). Hallado: Anexo ${num}.`,
+            expected: `Anexo ${expectedNum}`,
+            actual: `Anexo ${num}`,
+            paragraphIndex: i
+          });
+        }
+
+        // C. Validar bold en la etiqueta y normal en el título
+        const labelText = `Anexo ${num}.`;
+        let labelOk = true;
+        let titleOk = true;
+        let prefixMatched = "";
+
+        if (p.runs) {
+          p.runs.forEach(r => {
+            const rTxt = r.text || "";
+            if (!rTxt.trim()) return;
+            if (prefixMatched.length < labelText.length) {
+              prefixMatched += rTxt;
+              if (r.properties?.bold !== true) labelOk = false;
+            } else {
+              if (r.properties?.bold === true) titleOk = false;
+            }
+          });
+        }
+
+        if (!labelOk) {
+          this.agregarResultado({
+            id: `anexo-label-bold-${i}`,
+            category: '📎 Anexos',
+            rule: `Negrita Etiqueta Anexo ${num}`,
+            status: 'error',
+            message: `La etiqueta 'Anexo ${num}.' debe estar en negrita.`,
+            expected: 'Negrita',
+            actual: 'Normal',
+            paragraphIndex: i
+          });
+        }
+        if (!titleOk) {
+          this.agregarResultado({
+            id: `anexo-title-normal-${i}`,
+            category: '📎 Anexos',
+            rule: `Estilo Título Anexo ${num}`,
+            status: 'error',
+            message: `El título del anexo '${titleTxt.substring(0, 30)}...' debe estar sin negrita.`,
+            expected: 'Normal (Sin Negrita)',
+            actual: 'Negrita',
+            paragraphIndex: i
+          });
+        }
+
+        // D. Capitalización
+        if (titleTxt) {
+          const firstLetter = titleTxt[0];
+          const okCase = firstLetter === firstLetter.toUpperCase();
+          const rest = titleTxt.substring(1).replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/g, '');
+          let okRest = true;
+          if (okCase && rest) {
+            okRest = rest !== rest.toUpperCase();
+          }
+          if (!okCase || !okRest) {
+            this.agregarResultado({
+              id: `anexo-case-${i}`,
+              category: '📎 Anexos',
+              rule: `Capitalización Anexo ${num}`,
+              status: 'error',
+              message: `El título del anexo debe iniciar con mayúscula y continuar en minúsculas.`,
+              expected: 'Mayúscula inicial, resto minúsculas',
+              actual: titleTxt.substring(0, 30),
+              paragraphIndex: i
+            });
+          }
+        }
+
+        // E. Sangrías
+        const hasIndent = leftIndent > 50 || firstLineIndent > 50 || hangingIndent > 50;
+        if (hasIndent) {
+          this.agregarResultado({
+            id: `anexo-indent-${i}`,
+            category: '📎 Anexos',
+            rule: `Sangría Título Anexo ${num}`,
+            status: 'error',
+            message: `El título del Anexo ${num} debe estar sin sangría de ningún tipo.`,
+            expected: 'Izq 0cm, Prim 0cm, Fran 0cm',
+            actual: `Izq ${lCm}cm, Prim ${fCm}cm, Fran ${hCm}cm`,
+            paragraphIndex: i
+          });
+        }
+
+        // F. Interlineado, alineación y tamaño
+        if (align !== 'left') {
+          this.agregarResultado({
+            id: `anexo-align-${i}`,
+            category: '📎 Anexos',
+            rule: `Alineación Título Anexo ${num}`,
+            status: 'error',
+            message: `El título del Anexo ${num} debe estar alineado a la izquierda.`,
+            expected: 'Izquierda',
+            actual: align,
+            paragraphIndex: i
+          });
+        }
+
+        const sizeOk = pTamano >= 23 && pTamano <= 25;
+        if (!sizeOk) {
+          this.agregarResultado({
+            id: `anexo-size-${i}`,
+            category: '📎 Anexos',
+            rule: `Tamaño Título Anexo ${num}`,
+            status: 'error',
+            message: `El título del Anexo ${num} debe ser de tamaño 12pt.`,
+            expected: '12pt',
+            actual: `${(pTamano/2).toFixed(1)}pt`,
+            paragraphIndex: i
+          });
+        }
+      } else {
+        // Párrafo normal dentro de Anexos
+        const isSubTitle = /DECLARACI[ÓO]N\s+JURADA|AUTORIZACI[ÓO]N/i.test(text);
+        const hasIndent = leftIndent > 50 || firstLineIndent > 50 || hangingIndent > 50;
+        if (hasIndent && !isSubTitle) {
+          this.agregarResultado({
+            id: `anexo-content-indent-${i}`,
+            category: '📎 Anexos',
+            rule: 'Sangría Contenido Anexo',
+            status: 'error',
+            message: 'El contenido de los anexos debe estar sin sangría de ningún tipo.',
+            expected: 'Izq 0cm, Prim 0cm, Fran 0cm',
+            actual: `Izq ${lCm}cm, Prim ${fCm}cm, Fran ${hCm}cm`,
+            paragraphIndex: i
+          });
+        }
+
+        if (!isSubTitle && text.length > 30) {
+          if (align !== 'left') {
+            this.agregarResultado({
+              id: `anexo-content-align-${i}`,
+              category: '📎 Anexos',
+              rule: 'Alineación Contenido Anexo',
+              status: 'warning',
+              message: 'El contenido de los anexos debe estar alineado a la izquierda.',
+              expected: 'Izquierda',
+              actual: align,
+              paragraphIndex: i
+            });
+          }
+
+          const sizeOk = pTamano >= 23 && pTamano <= 25;
+          if (!sizeOk) {
+            this.agregarResultado({
+              id: `anexo-content-size-${i}`,
+              category: '📎 Anexos',
+              rule: 'Tamaño Contenido Anexo',
+              status: 'error',
+              message: 'El contenido de los anexos debe ser de tamaño 12pt.',
+              expected: '12pt',
+              actual: `${(pTamano/2).toFixed(1)}pt`,
+              paragraphIndex: i
+            });
+          }
         }
       }
     }
 
-    this.agregarResultado({
-      id: 'anexos-format',
-      category: '📎 Anexos y Documentos',
-      rule: 'Formato de Etiquetas de Anexos',
-      status: (titleOk && anexosDetectados > 0 && anexosFormatoOk === anexosDetectados) ? 'passed' : 'warning',
-      message: `Título Principal: ${titleOk ? 'Correcto (16pt)' : 'Incorrecto'}. Se detectaron ${anexosDetectados} anexos numerados; ${anexosFormatoOk} cumplen el formato (12pt, Izquierda).`,
-      expected: 'Título 16pt Centrado. Etiquetas "Anexo X." a 12pt alineadas a la izquierda.',
-      actual: `Anexos correctos: ${anexosFormatoOk}/${anexosDetectados}`,
-      paragraphIndex: anexosIdx
-    });
-
-    // Módulo robusto de detección de documentos escaneados
-    const docsEncontrados = (tieneDeclaracionJurada ? 1 : 0) + (tieneAutorizacionDeposito ? 1 : 0);
-
-    let docsMessage = '';
-    if (docsEncontrados === 2) {
-      docsMessage = 'Ambos documentos legales fueron detectados en texto plano.';
-    } else {
-      docsMessage = 'ALERTA DE OCR: No se encontró texto plano de la Declaración Jurada o Autorización. Si están insertados como imagen (escáner), requieren Validación OCR / Revisión Manual.';
+    if (foundAnnexTitles.length === 0) {
+      this.agregarResultado({
+        id: 'anexos-individual-titles-missing',
+        category: '📎 Anexos',
+        rule: 'Títulos de Anexos Individuales',
+        status: 'error',
+        message: 'No se identificaron títulos de anexos secuenciales (Anexo 1, Anexo 2...).',
+        expected: 'Anexo 1, Anexo 2...',
+        actual: 'No encontrados',
+        paragraphIndex: -1
+      });
     }
 
+    // Detección de Declaración Jurada y Autorización para depósito
+    const docsEncontrados = (tieneDeclaracionJurada ? 1 : 0) + (tieneAutorizacionDeposito ? 1 : 0);
     this.agregarResultado({
       id: 'anexos-legales',
-      category: '📎 Anexos y Documentos',
+      category: '📎 Anexos',
       rule: 'Documentos Legales Obligatorios (Firmas)',
       status: docsEncontrados === 2 ? 'passed' : 'warning',
-      message: docsMessage,
+      message: docsEncontrados === 2 
+        ? 'Ambos documentos legales fueron detectados en el texto.'
+        : 'ALERTA DE OCR: No se encontró texto plano de la Declaración Jurada o Autorización. Si están insertados como imagen (escáner), requieren Validación OCR / Revisión Manual.',
       expected: 'Declaración Jurada de Autenticidad y Autorización de Depósito presentes al final.',
-      actual: `Documentos detectados en texto: ${docsEncontrados}/2`,
+      actual: `Documentos detectados: ${docsEncontrados}/2`,
       paragraphIndex: -1
     });
   }
@@ -2100,6 +2578,37 @@ class RuleEngine {
     // Pesos institucionales
     let deduccion = (errores * 5) + (advertencias * 1);
     this.stats.score = Math.max(0, 100 - deduccion);
+  }
+
+  verificarNotasYFuentes() {
+    this.paragraphs.forEach((p, idx) => {
+      const text = p.text.trim();
+      const upper = text.toUpperCase();
+      
+      if (upper.startsWith("NOTA") || upper.startsWith("FUENTE")) {
+        const hasColon = text.substring(0, 15).includes(':');
+        const hasSemicolon = text.substring(0, 15).includes(';');
+        
+        // Estilos: verificamos el primer run que tenga contenido
+        const mainRun = p.runs?.find(r => r.text && r.text.trim().length > 0);
+        const isBold = mainRun?.properties?.bold || false;
+        const isItalic = mainRun?.properties?.italic || false;
+        const fontSize = mainRun?.properties?.fontSize || 0;
+        
+        const ok = !isBold && !isItalic && Math.abs(fontSize - 20) <= 2 && hasColon && !hasSemicolon;
+
+        this.agregarResultado({
+          id: `note-source-${idx}`,
+          category: '📊 Tablas/Figuras',
+          rule: `Formato de ${upper.startsWith("NOTA") ? 'Nota' : 'Fuente'}`,
+          status: ok ? 'passed' : 'error',
+          message: `La etiqueta "${text.substring(0, 15)}..." debe ser 10pt, sin negrita, sin cursiva y usar dos puntos (:).`,
+          expected: '10pt, Normal, ":"',
+          actual: `${fontSize/2}pt, ${isBold ? 'Bold' : 'Normal'}, ${isItalic ? 'Italic' : 'Normal'}, ${hasColon ? ':' : hasSemicolon ? ';' : 'X'}`,
+          paragraphIndex: idx
+        });
+      }
+    });
   }
 }
 

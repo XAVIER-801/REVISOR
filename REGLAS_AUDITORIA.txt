@@ -1,0 +1,90 @@
+🏛️ CONFIGURACIÓN DE REGLAS - MOTOR EXPERTO REVISOR 2.0
+
+Este documento detalla qué aspectos el sistema considera OBLIGATORIOS (Errores Críticos) 
+y cuáles considera SUGERENCIAS (Advertencias).
+
+===============================================================================
+🔴 1. REGLAS CRÍTICAS (OBLIGATORIAS / ERRORES)
+===============================================================================
+Si alguno de estos puntos falla, el sistema restará puntos significativos y lo marcará en ROJO.
+
+A. CONFIGURACIÓN DE PÁGINA:
+   - Tamaño de Papel: Debe ser estrictamente A4.
+   - Margen Superior: 2.5 cm.
+   - Margen Inferior: 2.5 cm.
+   - Margen Derecho: 2.5 cm.
+   - Margen Izquierdo: 3.0 cm (Para encuadernación).
+
+B. JERARQUÍA DE TÍTULOS (NIVEL 1):
+   - Títulos (RESUMEN, INTRODUCCIÓN, CAPÍTULOS, CONCLUSIONES, etc.):
+     * Tamaño: 16pt.
+     * Estilo: Negrita (Bold).
+     * Alineación: Centrado.
+
+C. JERARQUÍA DE TÍTULOS Y SANGRÍAS (NIVELES 2 AL 5):
+   - Nivel 2 (ej. 1.1.): 
+     * Título: Justificado, Negrita. Sangría Izq: 0cm, Francesa: 1.25cm.
+     * Contenido: Justificado. Sangría Izq: 0cm, Primera línea: 1.25cm.
+   - Nivel 3 (ej. 1.1.1.): 
+     * Título: Justificado, Negrita. Sangría Izq: 1.25cm, Francesa: 1.25cm.
+     * Contenido: Justificado. Sangría Izq: 1.25cm, Primera línea: 1.25cm.
+   - Niveles 4 y 5: 
+     * Título: Justificado, Negrita. Sangría Izq: 2.5cm, Francesa: 1.5cm.
+     * Contenido: Justificado. Sangría Izq: 2.5cm, Primera línea: 1.25cm.
+   - Sangría de Viñetas (Depende del nivel de contenido):
+     * Bajo Nivel 1 y 2: Sangría Izq: 0.5cm, Francesa: 0.75cm.
+     * Bajo Nivel 3: Sangría Izq: 1.75cm, Francesa: 0.75cm.
+     * Bajo Nivel 4 y 5: Sangría Izq: 3.0cm, Francesa: 0.75cm.
+
+D. CUERPO DEL TEXTO:
+   - Alineación: Debe estar Justificado (ambos lados).
+   - Interlineado: Debe ser estrictamente 2.0 (Doble).
+   - Tablas y Figuras (Formato Superior):
+     * Etiqueta (ej. Tabla 1): 12pt, Negrita, Fuera de la tabla, Sangría Izquierda igual al nivel del título.
+     * Título Descriptivo: 12pt, Cursiva, SIN Negrita, Fuera de la tabla, Sangría Izquierda igual al nivel del título.
+   - Contenido Interno de la Tabla (Formato APA):
+     * Encabezado (Primera fila): Debe estar Centrado y en Negrita.
+     * Cuerpo de la Tabla: Interlineado de 1.0 o 1.5. Las reglas de texto general (ej. justificado) no aplican aquí.
+     * Bordes: Se exige el uso de líneas horizontales (Formato APA).
+   - Notas y Fuentes (debajo de Tablas/Figuras):
+     * Tamaño: 10pt.
+     * Estilo Etiqueta (Nota: / Fuente:): Normal (Sin negrita, SIN CURSIVA).
+     * Estilo Contenido: Puede llevar cursiva si es descripción técnica.
+     * Puntuación: Debe usar dos puntos (:), nunca punto y coma (;).
+     * Espaciado Posterior: 15pt obligatorio para separar del siguiente párrafo.
+     * Sangría Izquierda: Igual al nivel del título al que pertenece la tabla/figura.
+
+E. ESTRUCTURA DE CONTENIDO:
+   - Índice General: 
+     * Tamaño de fuente: 16pt para el título principal, 12pt para el contenido.
+     * Alineación CAPÍTULOS y Secciones Finales: Debe estar estrictamente Centrado.
+     * Alineación Títulos descriptivos y sub-ítems: Debe estar Justificado (ambos lados).
+     * Presencia: Si el documento tiene Dedicatoria/Agradecimientos, estos deben figurar obligatoriamente en el Índice.
+   - Palabras Clave: Debe empezar exactamente con el tag "Palabras clave:" (en minúscula, excepto la P).
+   - Sangría: Los párrafos deben tener sangría de primera línea de 1.25 cm.
+   - Agradecimientos: Debe ocupar máximo una sola página de la tesis.
+   - Extensión del Resumen: Debe tener entre 250 y 300 palabras.
+   - Documentos Obligatorios: Debe incluir "Declaración Jurada de Autenticidad" y "Autorización para el Depósito" (Anexos UNAP).
+
+===============================================================================
+🟡 2. REGLAS DE SUGERENCIA (ADVERTENCIAS)
+===============================================================================
+Estos puntos se marcan en AMARILLO. No impiden el depósito, pero se recomienda corregir 
+para una tesis de alta calidad.
+
+A. HÁBITOS DE FORMATO:
+   - Saltos de Página: Se advierte si se usan 3 o más "Enters" seguidos en lugar de usar 
+     la función oficial "Insertar Salto de Página".
+
+C. CALIDAD DE ESCRITURA (MICRO-EDICIÓN):
+   - Espacios Dobles: Detecta espacios repetidos innecesarios.
+   - Puntuación: Detecta espacios antes de puntos o comas.
+   - Espaciado: Detecta falta de espacio después de signos de puntuación.
+   - Oraciones Largas: Advierte sobre oraciones de más de 50 palabras (difíciles de leer).
+   - Inicio de Párrafo: Detecta si un párrafo inicia con minúscula.
+   - Puntos Finales: Advierte si un párrafo largo no termina con un punto.
+
+===============================================================================
+SISTEMA: VRI-SCANNER Expert Engine (Python-HiFi)
+VERSIÓN: 2.0.0
+===============================================================================

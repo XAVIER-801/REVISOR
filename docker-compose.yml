@@ -1,18 +1,30 @@
 services:
-  app:
+  # Frontend - Interfaz de Usuario
+  revisor-web:
     build:
       context: .
       dockerfile: Dockerfile
+    container_name: revisor-web-prod
     ports:
-      - "3001:3000"
+      - "3005:3000"
+    environment:
+      - NODE_ENV=production
+      - PYTHON_API_URL=http://revisor-api:8000
+    depends_on:
+      - revisor-api
     restart: always
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+
+  # Backend - Motor Experto de Python
+  revisor-api:
+    build:
+      context: ./backend-python
+      dockerfile: Dockerfile
+    container_name: revisor-api-prod
+    ports:
+      - "8005:8000"
     volumes:
-      - ocr_data:/app/ocr-data
+      - ./backend-python/tmp_uploads:/app/tmp_uploads
+    restart: always
 
 volumes:
   ocr_data:

@@ -22,7 +22,7 @@ async function tryPythonEngine(file, fileName) {
     pythonForm.append('file', file, fileName);
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+    const timeout = setTimeout(() => controller.abort(), 900000); // 15 min timeout
 
     const response = await fetch(`${PYTHON_API_URL}/audit`, {
       method: 'POST',
@@ -112,7 +112,7 @@ export async function POST(request) {
       : new PdfParser(buffer).parse();
 
     const timeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('Procesamiento demasiado largo (3 min).')), 180000)
+      setTimeout(() => reject(new Error('Procesamiento demasiado largo (15 min).')), 900000)
     );
 
     parsedDoc = await Promise.race([parsePromise, timeoutPromise]);

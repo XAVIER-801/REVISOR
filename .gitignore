@@ -47,3 +47,6 @@ npm-debug.log*
 .env
 .env.local
 .vscode/
+brain/
+backend-python/tmp_uploads/
+TESIS PARA AUDITAR/

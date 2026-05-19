@@ -1,0 +1,195 @@
+"""
+capitulo_nivel345.py - Auditoría de Títulos de Nivel 3, 4 y 5 Y su Contenido.
+
+Cubre: Títulos como "2.3.1. Origen e importancia de la pitahaya"
+y los párrafos de contenido que están directamente bajo estos títulos.
+
+Reglas de TÍTULO Nivel 3:
+- Alineación: Justificada o Izquierda
+- Estilo: Negrita
+- Capitalización: Minúsculas (mayúscula inicial)
+- Interlineado: 2.0
+- Espaciado: anterior 0pt, posterior 10pt
+- Sangría: Izq 1.25cm, Francesa 1.25cm
+
+Reglas de TÍTULO Nivel 4/5:
+- Igual que nivel 3 pero con Sangría: Izq 2.5cm, Francesa 1.5cm
+
+Reglas de CONTENIDO bajo Nivel 3:
+- Sangría: Izquierda 1.25cm, Primera Línea 1.25cm
+
+Reglas de CONTENIDO bajo Nivel 4/5:
+- Sangría: Izquierda 2.5cm, Primera Línea 1.25cm
+"""
+import re
+from .base_auditor import BaseAuditor
+
+
+class CapituloNivel345Auditor(BaseAuditor):
+
+    INDENT_SPECS = {
+        3: (1.25, 1.25),
+        4: (2.5, 1.5),
+        5: (2.5, 1.5),
+    }
+
+    CONTENT_INDENT_SPECS = {
+        3: (1.25, 1.25),
+        4: (2.5, 1.25),
+        5: (2.5, 1.25),
+    }
+
+    def audit(self):
+        for i, p in enumerate(self.paragraphs):
+            if not p.get("is_in_body"):
+                continue
+
+            body_level = p.get("body_level", 0)
+            if body_level < 3:
+                continue
+
+            txt = p['text'].strip()
+            if not txt:
+                continue
+
+            norm = p['norm']
+            bold = any(r.get('bold') for r in p.get('runs', []))
+            align = p.get('alignment', 'left')
+            l_cm = round((p.get('indent_left') or 0) / 567.0, 2)
+            f_cm = round((p.get('indent_first') or 0) / 567.0, 2)
+            h_cm = round((p.get('indent_hanging') or 0) / 567.0, 2)
+
+            is_bullet = p.get('is_bullet', False)
+            is_title = p.get('is_heading', False)
+
+            # Detectar título por numeración
+            numbering_match = re.match(r'^(\d+(?:\.\d+)+)\.?(?:[\s\t]+|$)', txt.strip())
+            numbering_level = numbering_match.group(1).count('.') + 1 if numbering_match else None
+
+            is_title_at_level = (is_title or numbering_level is not None) and numbering_level is not None and numbering_level >= 3
+
+            level_label = f"Nivel {body_level}" if body_level <= 5 else "Nivel 5+"
+
+            # ═══ TÍTULO NIVEL 3/4/5 ═══
+            if is_title_at_level and numbering_level == body_level:
+                # Negrita
+                if not bold:
+                    self._add("Jerarquía", f"Estilo de Fuente Título {level_label}", "error",
+                              f"El título de {level_label.lower()} debe estar en Negrita.",
+                              "Negrita", "Normal", p_idx=p['index'], p_text=txt)
+
+                # Alineación
+                if align not in ['both', 'justify']:
+                    self._add("Jerarquía", f"Alineación Título {level_label}", "error",
+                              f"El título de {level_label.lower()} debe tener alineación justificada.",
+                              "Justificada", align, p_idx=p['index'], p_text=txt)
+
+                # Interlineado
+                line_spacing = p.get('line_spacing')
+                if line_spacing is not None and abs(line_spacing - 2.0) > 0.2:
+                    self._add("Jerarquía", f"Interlineado Título {level_label}", "error",
+                              f"El título de {level_label.lower()} debe tener interlineado 2.0.",
+                              "2.0", str(line_spacing), p_idx=p['index'], p_text=txt)
+
+                # Espaciado
+                s_before = p.get('spacing_before', 0)
+                s_after = p.get('spacing_after', 0)
+                if s_before > 1.0:
+                    self._add("Jerarquía", f"Espaciado Anterior Título {level_label}", "warning",
+                              f"El título de {level_label.lower()} debe tener espaciado anterior de 0pt.",
+                              "0pt", f"{s_before}pt", p_idx=p['index'], p_text=txt)
+                if abs(s_after - 10.0) > 2.0:
+                    self._add("Jerarquía", f"Espaciado Posterior Título {level_label}", "warning",
+                              f"El título de {level_label.lower()} debe tener espaciado posterior de 10pt.",
+                              "10pt", f"{s_after}pt", p_idx=p['index'], p_text=txt)
+
+                # Capitalización: minúsculas (mayúscula inicial)
+                txt_letters = re.sub(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ]', '', txt)
+                if txt_letters and not any(c.islower() for c in txt_letters):
+                    self._add("Jerarquía", f"Capitalización Título {level_label}", "error",
+                              f"Los títulos de {level_label.lower()} deben estar en minúsculas (con mayúscula inicial).",
+                              "Minúsculas (mayúscula inicial)", txt[:40], p_idx=p['index'], p_text=txt)
+
+                # Sangría del título
+                effective_level = min(body_level, 5)
+                exp_l, exp_h = self.INDENT_SPECS.get(effective_level, self.INDENT_SPECS[5])
+                ok_l = abs(l_cm - exp_l) <= 0.15
+                ok_h = abs(h_cm - exp_h) <= 0.15
+                l_part = f"Izq {l_cm}cm" if ok_l else f"**Izq {l_cm}cm**"
+                h_part = f"Fran {h_cm}cm" if ok_h else f"**Fran {h_cm}cm**"
+
+                if not ok_l or not ok_h:
+                    self._add("Jerarquía", f"Sangría Título {level_label}", "error",
+                              f"{level_label} debe tener Sangría Izquierda {exp_l}cm y Francesa {exp_h}cm.",
+                              f"Izq {exp_l}cm, Fran {exp_h}cm", f"{l_part}, {h_part}", p_idx=p['index'], p_text=txt)
+
+                    # Detección de desalineación
+                    detected_indent_level = None
+                    all_specs = {2: (0.0, 1.25), **self.INDENT_SPECS}
+                    for chk_lvl, (chk_l, chk_h) in all_specs.items():
+                        if abs(l_cm - chk_l) <= 0.15 and abs(h_cm - chk_h) <= 0.15:
+                            detected_indent_level = chk_lvl
+                            break
+
+                    if detected_indent_level is not None and detected_indent_level != body_level:
+                        self._add("Jerarquía", f"⚠️ Desalineación Título {level_label}", "warning",
+                                  f"El título '{txt[:30]}...' tiene numeración de {level_label} pero su sangría corresponde al Nivel {detected_indent_level}.",
+                                  f"Sangría de {level_label} (Izq {exp_l}cm, Fran {exp_h}cm)",
+                                  f"Sangría de Nivel {detected_indent_level} (Izq {l_cm}cm, Fran {h_cm}cm)",
+                                  p_idx=p['index'], p_text=txt)
+                continue
+
+            # ═══ VIÑETAS → se auditan en vinetas.py ═══
+            if is_bullet:
+                continue
+
+            # ═══ OTROS TÍTULOS ═══
+            if is_title:
+                continue
+
+            # ═══ CONTENIDO bajo Nivel 3/4/5 ═══
+            if len(txt) <= 50:
+                continue
+            if txt.upper().startswith("NOTA:") or txt.upper().startswith("FUENTE:"):
+                continue
+            if re.match(r"^(TABLA|FIGURA)\s+\d+", norm):
+                continue
+
+            if bold:
+                self._add("Estructura", f"Estilo de Fuente Contenido ({level_label})", "warning",
+                          f"El contenido bajo {level_label.lower()} debe estar en estilo Normal (Sin Negrita).",
+                          "Normal (Sin Negrita)", "Negrita", p_idx=p['index'], p_text=txt[:40])
+
+            if align not in ['both', 'justify']:
+                self._add("Estructura", f"Alineación Contenido ({level_label})", "error",
+                          f"El contenido bajo {level_label.lower()} debe tener alineación justificada.",
+                          "Justificada", align, p_idx=p['index'], p_text=txt[:40])
+
+            line_spacing = p.get('line_spacing')
+            if line_spacing is not None and abs(line_spacing - 2.0) > 0.2:
+                self._add("Estructura", f"Interlineado Contenido ({level_label})", "error",
+                          f"El contenido bajo {level_label.lower()} debe tener interlineado 2.0.",
+                          "2.0", str(line_spacing), p_idx=p['index'], p_text=txt[:40])
+
+            s_before = p.get('spacing_before', 0)
+            s_after = p.get('spacing_after', 0)
+            if s_before > 1.0:
+                self._add("Estructura", f"Espaciado Anterior Contenido ({level_label})", "warning",
+                          f"El contenido bajo {level_label.lower()} debe tener espaciado anterior de 0pt.",
+                          "0pt", f"{s_before}pt", p_idx=p['index'], p_text=txt[:40])
+            if abs(s_after - 10.0) > 2.0:
+                self._add("Estructura", f"Espaciado Posterior Contenido ({level_label})", "warning",
+                          f"El contenido bajo {level_label.lower()} debe tener espaciado posterior de 10pt.",
+                          "10pt", f"{s_after}pt", p_idx=p['index'], p_text=txt[:40])
+
+            # Sangría del contenido
+            effective_level = min(body_level, 5)
+            exp_l_c, exp_f_c = self.CONTENT_INDENT_SPECS.get(effective_level, self.CONTENT_INDENT_SPECS[5])
+            ok_l = abs(l_cm - exp_l_c) <= 0.1
+            ok_f = abs(f_cm - exp_f_c) <= 0.1
+            l_part = f"Izq {l_cm}cm" if ok_l else f"**Izq {l_cm}cm**"
+            f_part = f"Prim {f_cm}cm" if ok_f else f"**Prim {f_cm}cm**"
+            if not ok_l or not ok_f:
+                self._add("Estructura", f"Sangría de Contenido ({level_label})", "warning",
+                          f"El contenido bajo {level_label.lower()} debe tener Sangría Izquierda {exp_l_c}cm y Primera Línea {exp_f_c}cm.",
+                          f"Izq {exp_l_c}cm, Prim {exp_f_c}cm", f"{l_part}, {f_part}", p_idx=p['index'], p_text=txt[:40])

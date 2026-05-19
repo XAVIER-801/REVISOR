@@ -7,6 +7,7 @@ import {
   BookOpen, ChevronRight, GraduationCap, BarChart3,
   ArrowRight, ShieldCheck, Zap, Globe, File, Eye, X, ExternalLink, Cpu, Activity, TrendingUp, MousePointer2
 } from 'lucide-react';
+import BookViewer from './components/BookViewer';
 
 export default function Home() {
   const [file, setFile] = useState(null);
@@ -103,7 +104,7 @@ export default function Home() {
                 Subir Tesis <Upload size={24} />
              </button>
              <button className="btn-crypto" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', padding: '1.4rem 4rem', fontSize: '1.1rem' }} onClick={() => setShowPreview(true)}>
-                Normativa Oficial
+                Base Guía que se Auditará
              </button>
           </div>
           {/* Input oculto necesario para que funcione el botón de arriba */}
@@ -130,30 +131,7 @@ export default function Home() {
         </section>
 
         {showPreview && (
-          <div className="modal-overlay animate-reveal" onClick={() => setShowPreview(false)} style={{ zIndex: 3000 }}>
-             <div className="modal-content card-elite" onClick={e => e.stopPropagation()} style={{ height: '90vh', maxWidth: '1200px', background: '#06080A', padding: 0 }}>
-                <div style={{ padding: '1.5rem 2.5rem', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                   <div className="flex items-center gap-4">
-                      <div className="ocr-pulse"></div>
-                      <h3 className="font-black text-sm uppercase tracking-widest text-slate-300">Normativa Institucional UNAP</h3>
-                   </div>
-                   <div className="flex items-center gap-4">
-                      <a href={pdfUrl} target="_blank" className="nav-link" style={{ fontSize: '0.7rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                         <ExternalLink size={16} /> Abrir en nueva pestaña
-                      </a>
-                      <button onClick={() => setShowPreview(false)} className="p-2 text-slate-500 hover:text-white transition-all"><X size={32}/></button>
-                   </div>
-                </div>
-                {/* Fallback link if iframe fails */}
-                <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-                   <iframe src={pdfUrl} style={{ width: '100%', height: '100%', border: 'none' }}></iframe>
-                   <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: -1, textAlign: 'center' }}>
-                      <p className="text-slate-500">Cargando guía oficial...</p>
-                      <a href={pdfUrl} target="_blank" className="text-accent underline mt-2 block">Clic aquí si no carga automáticamente</a>
-                   </div>
-                </div>
-             </div>
-          </div>
+          <BookViewer onClose={() => setShowPreview(false)} pdfUrl={pdfUrl} />
         )}
 
         {error && (
@@ -178,7 +156,7 @@ export default function Home() {
             <h2 className="text-4xl font-black tracking-tighter">Analizando Bloque...</h2>
             <div className="flex justify-center gap-3 mt-10">
                <div className="ocr-pulse"></div>
-               <span className="text-xs font-bold text-accent uppercase tracking-[0.6em]">Neural OCR Active</span>
+               <span className="text-xs font-bold text-accent uppercase tracking-wider">Se está revisando el formato de su Tesis, sea paciente por favor</span>
             </div>
          </div>
        </main>
