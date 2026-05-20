@@ -19,13 +19,17 @@ class TablasAuditor(BaseAuditor):
         self._audit_table_labels_and_titles()
         self._audit_table_contents()
 
+    def _get_expected_indent_for_level(self, level):
+        """Retorna sangría esperada para un nivel."""
+        if level in [1, 2]:
+            return 0.0
+        elif level == 3:
+            return 1.25
+        else:  # 4, 5
+            return 2.5
+
     def _audit_table_labels_and_titles(self):
         """Audita etiquetas, títulos y notas/fuentes de tablas."""
-        def expected_indent(level):
-            if level in [1, 2]: return 0.0
-            elif level == 3: return 1.25
-            else: return 2.5
-
         for i, p in enumerate(self.paragraphs):
             txt = p['text'].strip()
             sec_upper = p.get('section', '').upper()
@@ -36,7 +40,7 @@ class TablasAuditor(BaseAuditor):
 
             upper = txt.upper()
             align = p.get('alignment', 'left')
-            l_cm = round((p.get('indent_left') or 0) / 567.0, 2)
+            l_cm = round(p.get('indent_left') or 0, 2)
             
             level = p.get('body_level') or p.get('level') or 1
             exp_l_cm = expected_indent(level)

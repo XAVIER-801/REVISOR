@@ -70,6 +70,41 @@ class BaseAuditor:
                 return r["size"], r["bold"], r["italic"], r["font"]
         return 12, False, False, "Times New Roman"
 
+    def _find_context_level(self, paragraph_index, max_distance=150):
+        """
+        Busca hacia atrás desde paragraph_index para encontrar el último nivel de título.
+        Retorna el nivel efectivo (1-5) del contexto más próximo.
+
+        Busca en orden de prioridad:
+        1. Párrafos marcados como is_heading=True (tienen body_level calculado)
+        2. Párrafos con numeración manual (1.2.3...)
+        3. Párrafos detectados como CAPÍTULO, INTRODUCCIÓN, etc.
+
+        Si no encuentra nada, retorna 1 (nivel por defecto).
+        """
+        for k in range(paragraph_index - 1, max(0, paragraph_index - max_distance), -1):
+            p = self.paragraphs[k]
+
+            # Opción 1: Título con heading marcado (body_level ya está calculado)
+            if p.get('is_heading', False):
+                level = p.get('body_level', 1)
+                if level > 0:
+                    return level
+
+            # Opción 2: Numeración manual (1.2.3)
+            norm_txt = self._norm(p['text'].strip())
+            numbering_match = re.match(r'^(\d+(?:\.\d+)+)', norm_txt)
+            if numbering_match:
+                numbering_level = numbering_match.group(1).count('.') + 1
+                if 1 <= numbering_level <= 5:
+                    return numbering_level
+
+            # Opción 3: CAPÍTULO X o sección principal
+            if any(k in norm_txt for k in ['CAPITULO', 'INTRODUCCION', 'CONCLUSIONES']):
+                return 1
+
+        return 1
+
     def audit(self):
         """Método principal que cada auditor debe implementar."""
         raise NotImplementedError("Cada auditor debe implementar audit()")

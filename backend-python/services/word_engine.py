@@ -34,15 +34,26 @@ from services.linguistic_analyzer import LinguisticAnalyzer
 from services.auditors.portada import PortadaAuditor
 from services.auditors.indice_general import IndiceGeneralAuditor
 from services.auditors.indice_tablas_figuras import IndiceTablasFigurasAuditor
-from services.auditors.tablas_figuras import TablasFigurasAuditor
+from services.auditors.paginacion_indices import PaginacionIndicesAuditor
+from services.auditors.tablas import TablasAuditor
+from services.auditors.figuras import FigurasAuditor
 from services.auditors.capitulo_nivel1 import CapituloNivel1Auditor
 from services.auditors.capitulo_nivel2 import CapituloNivel2Auditor
 from services.auditors.capitulo_nivel345 import CapituloNivel345Auditor
 from services.auditors.vinetas import VinetasAuditor
 from services.auditors.configuracion_pagina import ConfiguracionPaginaAuditor
-from services.auditors.resumen_abstract import ResumenAbstractAuditor
+from services.auditors.agradecimientos import AgradecimientosAuditor
+from services.auditors.resumen import ResumenAuditor
+from services.auditors.abstract import AbstractAuditor
 from services.auditors.anexos import AnexosAuditor
 from services.auditors.estilo_escritura import EstiloEscrituraAuditor
+from services.auditors.etiquetas_jurados import EtiquetasJuradosAuditor
+from services.auditors.acronimos import AcronimosAuditor
+from services.auditors.reporte_similitud import ReporteSimilitudAuditor
+from services.auditors.dedicatoria import DedicatoriaAuditor
+from services.auditors.conclusiones_recomendaciones import ConclusionesRecomendacionesAuditor
+from services.auditors.referencias_bibliograficas import ReferenciasBibliograficasAuditor
+from services.auditors.secuencia_titulos import SecuenciaTitulosAuditor
 
 # Palabras aproximadas por página en formato tesis
 _WORDS_PER_PAGE = 350
@@ -72,17 +83,28 @@ class WordAuditEngine:
 
             # ── Ejecutar cada auditor modular ──────────────────────────
             PortadaAuditor(self).audit()              # 📄 Portada
+            ReporteSimilitudAuditor(self).audit()      # 📄 Reporte de Similitud
+            DedicatoriaAuditor(self).audit()          # 📄 Dedicatoria
+            AgradecimientosAuditor(self).audit()       # 📋 Agradecimientos
             IndiceGeneralAuditor(self).audit()         # 🗂️ Índice General
             IndiceTablasFigurasAuditor(self).audit()   # 🗂️ Índice Tablas/Figuras
-            ResumenAbstractAuditor(self).audit()       # 📋 Resumen/Abstract
-            TablasFigurasAuditor(self).audit()         # 📊 Tablas y Figuras
+            PaginacionIndicesAuditor(self).audit()     # 🔢 Paginación de Índices
+            ResumenAuditor(self).audit()               # 📋 Resumen
+            AbstractAuditor(self).audit()              # 📋 Abstract
+            TablasAuditor(self).audit()                # 📊 Tablas
+            FigurasAuditor(self).audit()               # 📊 Figuras
             CapituloNivel1Auditor(self).audit()        # 📌 Nivel 1: Títulos + Contenido
             CapituloNivel2Auditor(self).audit()        # 📌 Nivel 2: Títulos + Contenido
             CapituloNivel345Auditor(self).audit()      # 📌 Nivel 3-5: Títulos + Contenido
+            SecuenciaTitulosAuditor(self).audit()      # 📌 Secuencia Lógica de Títulos
             VinetasAuditor(self).audit()               # 🔹 Viñetas (todos los niveles)
             ConfiguracionPaginaAuditor(self).audit()   # ⚙️ Configuración de página
             EstiloEscrituraAuditor(self).audit()       # ✍️ Estilo de escritura
+            ConclusionesRecomendacionesAuditor(self).audit() # 💡 Conclusiones y Recomendaciones
+            ReferenciasBibliograficasAuditor(self).audit() # 📚 Referencias Bibliográficas
             AnexosAuditor(self).audit()                # 📎 Anexos
+            EtiquetasJuradosAuditor(self).audit()      # 🏷️ Etiquetas Jurados
+            AcronimosAuditor(self).audit()             # 🔠 Acrónimos
 
             return self._finalize()
         except Exception as e:
@@ -98,17 +120,70 @@ class WordAuditEngine:
             root = etree.fromstring(z.read('word/document.xml'))
         body = root.find('w:body', NSMAP)
 
+        # Detección de numeración de líneas en secciones (borradores)
+        self.has_line_numbering = False
+        sectPr_elements = root.findall('.//w:sectPr', NSMAP)
+        for sectPr in sectPr_elements:
+            lnNumType = sectPr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lnNumType', NSMAP)
+            if lnNumType is None:
+                lnNumType = sectPr.find('w:lnNumType', NSMAP)
+            if lnNumType is not None:
+                self.has_line_numbering = True
+                break
+
+        # ── Parsear numbering.xml para mapear numId e ilvl a sus formatos de viñeta ──
+        bullet_definitions = {}
+        try:
+            with zipfile.ZipFile(self.working_path, 'r') as z:
+                num_xml_data = z.read('word/numbering.xml')
+                num_root = etree.fromstring(num_xml_data)
+                
+                # Mapear numId -> abstractNumId
+                num_map = {}
+                for num in num_root.findall('w:num', NSMAP):
+                    numId = num.get(f'{{{NSMAP["w"]}}}numId')
+                    abs_el = num.find('w:abstractNumId', NSMAP)
+                    if abs_el is not None:
+                        num_map[numId] = abs_el.get(f'{{{NSMAP["w"]}}}val')
+                        
+                # Parsear abstractNum
+                abstract_nums = {}
+                for absNum in num_root.findall('w:abstractNum', NSMAP):
+                    absId = absNum.get(f'{{{NSMAP["w"]}}}abstractNumId')
+                    levels = {}
+                    for lvl in absNum.findall('w:lvl', NSMAP):
+                        ilvl = lvl.get(f'{{{NSMAP["w"]}}}ilvl')
+                        numFmt_el = lvl.find('w:numFmt', NSMAP)
+                        numFmt = numFmt_el.get(f'{{{NSMAP["w"]}}}val') if numFmt_el is not None else 'None'
+                        lvlText_el = lvl.find('w:lvlText', NSMAP)
+                        lvlText = lvlText_el.get(f'{{{NSMAP["w"]}}}val') if lvlText_el is not None else ''
+                        
+                        rPr = lvl.find('w:rPr', NSMAP)
+                        rFonts = rPr.find('w:rFonts', NSMAP) if rPr is not None else None
+                        font_name = rFonts.get(f'{{{NSMAP["w"]}}}hint') or rFonts.get(f'{{{NSMAP["w"]}}}ascii') if rFonts is not None else 'None'
+                        
+                        levels[ilvl] = {"numFmt": numFmt, "lvlText": lvlText, "font": font_name}
+                    abstract_nums[absId] = levels
+                    
+                # Combinar en bullet_definitions
+                for numId, absId in num_map.items():
+                    if absId in abstract_nums:
+                        for ilvl, fmt_info in abstract_nums[absId].items():
+                            bullet_definitions[(int(numId), int(ilvl))] = fmt_info
+        except Exception:
+            pass
+
         accumulated_words = 0
         current_page = 1
         page_words = 0
         current_section = "Inicio del Documento"
         in_index_zone = False
-        # Secciones estructurales que queremos rastrear
         SECTION_KEYWORDS = [
             "DEDICATORIA", "AGRADECIMIENTOS", "INDICE GENERAL", 
             "INDICE DE TABLAS", "INDICE DE FIGURAS", "INDICE DE CUADROS", "INDICE DE ILUSTRACIONES",
             "RESUMEN", "ABSTRACT", "INTRODUCCION", "CONCLUSIONES", "RECOMENDACIONES", 
-            "REFERENCIAS BIBLIOGRAFICAS", "ANEXOS", "DECLARACION JURADA", "AUTORIZACION PARA EL DEPOSITO"
+            "REFERENCIAS BIBLIOGRAFICAS", "ANEXOS", "DECLARACION JURADA", "AUTORIZACION PARA EL DEPOSITO",
+            "ACRONIMOS", "ACRÓNIMOS"
         ]
         
         table_eq_cache = {}
@@ -303,6 +378,29 @@ class WordAuditEngine:
             if is_heading and heading_level is not None:
                 self.current_level = heading_level
 
+            # Resolviendo propiedades de lista
+            num_id_val = None
+            ilvl_val = None
+            list_fmt = None
+            list_lvl_text = None
+            list_font = None
+            if num_pr is not None:
+                numId_el = num_pr.find('w:numId', NSMAP)
+                ilvl_el = num_pr.find('w:ilvl', NSMAP)
+                if numId_el is not None:
+                    num_id_val = int(numId_el.get(f'{{{NSMAP["w"]}}}val'))
+                if ilvl_el is not None:
+                    ilvl_val = int(ilvl_el.get(f'{{{NSMAP["w"]}}}val'))
+                
+                if num_id_val is not None and ilvl_val is not None:
+                    fmt_info = bullet_definitions.get((num_id_val, ilvl_val))
+                    if fmt_info:
+                        list_fmt = fmt_info['numFmt']
+                        list_lvl_text = fmt_info['lvlText']
+                        list_font = fmt_info['font']
+
+            has_hyperlink = bool(p_el.find('.//w:hyperlink', NSMAP))
+
             self.paragraphs.append({
                 "text": txt,
                 "norm": norm_txt,
@@ -323,7 +421,13 @@ class WordAuditEngine:
                 "is_heading": is_heading,
                 "indent_left": res_ppr.get('indent_left'),
                 "indent_hanging": res_ppr.get('indent_hanging'),
-                "drawings": drawings
+                "drawings": drawings,
+                "has_hyperlink": has_hyperlink,
+                "num_id": num_id_val,
+                "ilvl": ilvl_val,
+                "list_fmt": list_fmt,
+                "list_lvl_text": list_lvl_text,
+                "list_font": list_font
             })
 
         # Identificar la portada (primera página)
@@ -346,32 +450,57 @@ class WordAuditEngine:
             if p.get("has_page_break") or p.get("estimated_page", 1) > 1:
                 in_cover = False
 
-        # Encontrar el final del bloque de índices
-        self.last_index_idx = -1
+        # Encontrar el final del bloque de índices de forma totalmente robusta (max_index_idx)
         self.index_start_idx = -1
+        max_index_idx = -1
+        
+        in_index_block = False
+        gap_count = 0
+        
         for idx, p_data in enumerate(self.paragraphs):
             norm_txt = p_data["norm"]
-            if "INDICE GENERAL" in norm_txt or "ÍNDICE GENERAL" in norm_txt:
-                self.index_start_idx = idx
-                break
-
-        if self.index_start_idx != -1:
-            for idx in range(self.index_start_idx + 1, len(self.paragraphs)):
-                p_data = self.paragraphs[idx]
-                txt = p_data["text"].strip()
-                norm_txt = p_data["norm"]
-                style = p_data.get("style_id", "")
+            txt = p_data["text"].strip()
+            style = p_data.get("style_id", "")
+            
+            if not in_index_block:
+                is_index_title = any(k in norm_txt for k in ["INDICE", "ÍNDICE", "CONTENIDO", "TABLA DE MATERIAS"])
                 is_tdc = style.upper().startswith("TOC") or style.upper().startswith("TDC") if style else False
-                is_idx_line = "...." in txt or bool(re.search(r"\d+$", txt)) or is_tdc
-                if is_idx_line:
-                    self.last_index_idx = idx
+                
+                if is_index_title or is_tdc:
+                    if self.index_start_idx == -1:
+                        self.index_start_idx = idx
+                    in_index_block = True
+                    gap_count = 0
+                    max_index_idx = idx
+                    continue
+                
+            if in_index_block:
+                is_tdc = style.upper().startswith("TOC") or style.upper().startswith("TDC") if style else False
+                is_idx_line = "...." in txt or bool(re.search(r"\s+\d+$", txt)) or is_tdc
+                
+                if is_idx_line or is_tdc:
+                    max_index_idx = idx
+                    gap_count = 0
                 else:
-                    is_major_section = norm_txt in [
-                        "INDICE DE TABLAS", "INDICE DE FIGURAS", "INDICE DE CUADROS", "INDICE DE ILUSTRACIONES",
-                        "RESUMEN", "ABSTRACT", "INTRODUCCION"
-                    ] or "CAPITULO" in norm_txt
-                    if is_major_section:
-                        break
+                    gap_count += 1
+                    
+                # Si pasamos 10 párrafos sin características de índice, asumimos que terminó
+                if gap_count > 10:
+                    break
+                    
+        self.last_index_idx = max_index_idx
+
+        # Encontrar el inicio del cuerpo del documento (después del índice)
+        body_start_idx = len(self.paragraphs)
+        for idx, p_data in enumerate(self.paragraphs):
+            if idx <= self.last_index_idx:
+                continue
+                
+            norm_txt = p_data["norm"]
+            is_capitulo = bool(re.match(r"^CAP[ÍI]TULO\s+(I|V|X|L|C|[0-9]+)", norm_txt))
+            if is_capitulo or "INTRODUCCION" in norm_txt:
+                body_start_idx = idx
+                break
 
         # ── Pre-computar body_level y is_in_body para cada párrafo ──
         # Esto permite que los auditores por nivel filtren sin duplicar lógica de rastreo
@@ -380,9 +509,16 @@ class WordAuditEngine:
         for i, p in enumerate(self.paragraphs):
             txt = p["text"].strip()
             norm = p["norm"]
+            sec_upper = p.get('section', '').upper()
+
+            is_prelim_section = any(k in sec_upper for k in [
+                'ÍNDICE', 'INDICE', 'DEDICATORIA', 'AGRADECIMIENTO', 'ACRÓNIMO', 'ACRONIMO', 'RESUMEN', 'ABSTRACT'
+            ]) or any(k in norm for k in [
+                'ÍNDICE GENERAL', 'INDICE GENERAL', 'ÍNDICE DE TABLAS', 'INDICE DE TABLAS', 'ÍNDICE DE FIGURAS', 'INDICE DE FIGURAS', 'ÍNDICE DE ANEXOS', 'INDICE DE ANEXOS'
+            ])
 
             # Determinar si estamos en el cuerpo del documento
-            if self.last_index_idx != -1 and i <= self.last_index_idx:
+            if (self.last_index_idx != -1 and i <= self.last_index_idx) or is_prelim_section:
                 p["is_in_body"] = False
                 p["body_level"] = 0
                 continue
@@ -412,10 +548,10 @@ class WordAuditEngine:
             ]) and (p.get('style_id', '').upper().startswith('HEADING') or txt.isupper())
 
             numbering_match = re.match(r'^(\d+(?:\.\d+)+)\.?(?:[\s\t]+|$)', txt)
-            if numbering_match:
-                current_body_level = numbering_match.group(1).count('.') + 1
-            elif is_capitulo or es_seccion_principal:
+            if is_capitulo or es_seccion_principal:
                 current_body_level = 1
+            elif numbering_match:
+                current_body_level = numbering_match.group(1).count('.') + 1
             elif p.get('is_heading') and p.get('level'):
                 current_body_level = p['level']
 

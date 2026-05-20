@@ -144,14 +144,30 @@ class PortadaAuditor(BaseAuditor):
                 w = logo["width"]
                 h = logo["height"]
 
-                ok_width = abs(w - 4.33) <= 0.05
-                ok_height = abs(h - 4.68) <= 0.05
+                ok_width = abs(w - 4.33) < 0.01
+                ok_height = abs(h - 4.68) < 0.01
 
                 status = "passed" if (ok_width and ok_height) else "error"
-                msg = f"El logo de la Universidad en la portada debe tener dimensiones de 4.33 cm de ancho y 4.68 cm de alto. Hallado: {w} cm de ancho, {h} cm de alto."
-                self._add("Portada", "Dimensiones del Logo", status, msg,
-                          "Ancho: 4.33cm, Alto: 4.68cm", f"Ancho: {w}cm, Alto: {h}cm",
-                          p_idx=p["index"])
+                
+                if status == "error":
+                    req_list = []
+                    act_list = []
+                    if not ok_width:
+                        req_list.append("Ancho: 4.33cm")
+                        act_list.append(f"Ancho: {w}cm")
+                    if not ok_height:
+                        req_list.append("Alto: 4.68cm")
+                        act_list.append(f"Alto: {h}cm")
+                        
+                    msg = f"El logo de la Universidad en la portada debe tener dimensiones de 4.33 cm de ancho y 4.68 cm de alto. Hallado: {w} cm de ancho, {h} cm de alto."
+                    self._add("Portada", "Dimensiones del Logo", status, msg,
+                              ", ".join(req_list), ", ".join(act_list),
+                              p_idx=p["index"])
+                else:
+                    msg = "El logo de la Universidad en la portada cumple perfectamente con las dimensiones oficiales de 4.33 cm x 4.68 cm."
+                    self._add("Portada", "Dimensiones del Logo", "passed", msg,
+                              "Ancho: 4.33cm, Alto: 4.68cm", f"Ancho: {w}cm, Alto: {h}cm",
+                              p_idx=p["index"])
                 logo_found = True
                 break
 

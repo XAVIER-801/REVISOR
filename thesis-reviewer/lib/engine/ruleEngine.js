@@ -28,7 +28,7 @@ class RuleEngine {
       'verificarResumen', 'verificarAbstract', 'verificarNumeracionPaginas',
       'verificarIndiceTablas', 'verificarIndiceFiguras', 'verificarIndiceAnexos',
       'verificarAcronimos', 'verificarEstructuraCapitulos', 'verificarAnexos',
-      'verificarNotasYFuentes'
+      'verificarNotasYFuentes', 'verificarEtiquetasJurados'
     ];
 
     v.forEach(m => {
@@ -274,6 +274,114 @@ class RuleEngine {
     }
   }
 
+  verificarEtiquetasJurados() {
+    this.paragraphs.forEach((p, idx) => {
+      const text = p.text.trim();
+      if (!text) return;
+      const upper = text.toUpperCase();
+
+      // 1. FECHA DE SUSTENTACIÓN:
+      if (upper.includes('FECHA DE SUSTENTACION') || upper.includes('FECHA DE SUSTENTACIÓN')) {
+        const align = p.properties?.alignment || 'left';
+        const isBold = p.runs?.some(r => r.properties?.bold && r.text?.trim().length > 0);
+        const indentLeftCm = (p.properties?.indent || 0) / 567;
+        const indentFirstCm = (p.properties?.firstLineIndent || 0) / 567;
+        const indentHangingCm = (p.properties?.hangingIndent || 0) / 567;
+        const sBefore = (p.properties?.spacingBefore || 0) / 20;
+        const sAfter = (p.properties?.spacingAfter || 0) / 20;
+
+        // Mayúsculas en etiqueta
+        const labelPart = text.split(':')[0] + ':';
+        const labelLetters = labelPart.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/g, '');
+        const isUppercase = labelLetters === labelLetters.toUpperCase();
+
+        const okCase = isUppercase;
+        const okBold = isBold;
+        const okAlign = align === 'right';
+        const okSBefore = Math.abs(sBefore - 10) < 2;
+        const okSAfter = sAfter < 1;
+        const okIndent = Math.abs(indentLeftCm) < 0.1 && Math.abs(indentFirstCm) < 0.1 && Math.abs(indentHangingCm) < 0.1;
+
+        const passed = okCase && okBold && okAlign && okSBefore && okSAfter && okIndent;
+
+        const alignStr = align === 'center' ? 'Centrado' : (align === 'left' ? 'Izquierda' : (align === 'right' ? 'Derecha' : 'Justificado'));
+        const checks = [
+          isUppercase ? 'MAYÚSCULAS' : 'Minúsculas',
+          isBold ? 'Negrita' : 'Normal',
+          alignStr,
+          `Esp. ant ${sBefore}pt, post ${sAfter}pt`,
+          okIndent ? 'Sin sangría' : 'Con sangría'
+        ];
+
+        this.agregarResultado({
+          id: `fecha-sustentacion-${idx}`,
+          category: '🖋️ Jurados',
+          rule: 'Formato "FECHA DE SUSTENTACIÓN:"',
+          status: passed ? 'passed' : 'error',
+          message: 'La etiqueta "FECHA DE SUSTENTACIÓN:" debe estar en MAYÚSCULAS, Negrita, alineada a la DERECHA, con espaciado anterior de 10pt y posterior de 0pt, y sin sangría.',
+          expected: 'MAYÚSCULAS, Negrita, Derecha, Esp. 10pt/0pt, Sin sangría',
+          actual: checks.join(', '),
+          paragraphIndex: idx
+        });
+      }
+
+      // 2. ÁREA:
+      else if (/^ÁREA\s*:/i.test(text) || /^AREA\s*:/i.test(text)) {
+        this._verificarAreaTemaJS(p, idx, 'ÁREA');
+      }
+
+      // 3. TEMA:
+      else if (/^TEMA\s*:/i.test(text)) {
+        this._verificarAreaTemaJS(p, idx, 'TEMA');
+      }
+    });
+  }
+
+  _verificarAreaTemaJS(p, idx, label) {
+    const text = p.text.trim();
+    const align = p.properties?.alignment || 'left';
+    const isBold = p.runs?.some(r => r.properties?.bold && r.text?.trim().length > 0);
+    const indentLeftCm = (p.properties?.indent || 0) / 567;
+    const indentFirstCm = (p.properties?.firstLineIndent || 0) / 567;
+    const indentHangingCm = (p.properties?.hangingIndent || 0) / 567;
+    const sBefore = (p.properties?.spacingBefore || 0) / 20;
+    const sAfter = (p.properties?.spacingAfter || 0) / 20;
+
+    // Mayúsculas en etiqueta
+    const labelPart = text.split(':')[0] + ':';
+    const labelLetters = labelPart.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑ]/g, '');
+    const isUppercase = labelLetters === labelLetters.toUpperCase();
+
+    const okCase = isUppercase;
+    const okBold = isBold;
+    const okAlign = align === 'left';
+    const okSBefore = sBefore < 1;
+    const okSAfter = sAfter < 1;
+    const okIndent = Math.abs(indentLeftCm) < 0.1 && Math.abs(indentFirstCm) < 0.1 && Math.abs(indentHangingCm) < 0.1;
+
+    const passed = okCase && okBold && okAlign && okSBefore && okSAfter && okIndent;
+
+    const alignStr = align === 'center' ? 'Centrado' : (align === 'left' ? 'Izquierda' : (align === 'right' ? 'Derecha' : 'Justificado'));
+    const checks = [
+      isUppercase ? 'MAYÚSCULAS' : 'Minúsculas',
+      isBold ? 'Negrita' : 'Normal',
+      alignStr,
+      `Esp. ant ${sBefore}pt, post ${sAfter}pt`,
+      okIndent ? 'Sin sangría' : 'Con sangría'
+    ];
+
+    this.agregarResultado({
+      id: `${label.toLowerCase()}-format-${idx}`,
+      category: '🖋️ Jurados',
+      rule: `Formato "${label}:"`,
+      status: passed ? 'passed' : 'error',
+      message: `La etiqueta "${label}:" debe estar en MAYÚSCULAS, Negrita, alineada a la IZQUIERDA, con espaciado anterior y posterior de 0pt, y sin sangría.`,
+      expected: 'MAYÚSCULAS, Negrita, Izquierda, Esp. 0pt/0pt, Sin sangría',
+      actual: checks.join(', '),
+      paragraphIndex: idx
+    });
+  }
+
   verificarFormatoDedicatoria() {
     const dedIdx = this.paragraphs.findIndex(p => p.text.toUpperCase().includes('DEDICATORIA'));
     if (dedIdx === -1) return;
@@ -505,9 +613,9 @@ class RuleEngine {
           id: `idx-item-align-${i}`,
           category: '🗂️ Índice',
           rule: `Alineación de entrada: ${text.substring(0, 15)}`,
-          status: (align === 'both' || align === 'justify') ? 'passed' : 'error',
-          message: 'Las entradas de contenido en el índice deben estar justificadas.',
-          expected: 'Justificado',
+          status: (align === 'both' || align === 'justify' || align === 'left') ? 'passed' : 'error',
+          message: 'Las entradas de contenido en el índice deben estar justificadas o alineadas a la izquierda.',
+          expected: 'Justificado o Izquierda',
           actual: align,
           paragraphIndex: i
         });
@@ -580,7 +688,7 @@ class RuleEngine {
       // Como el índice puede ser largo, usamos heurísticas de números de página al final
       const hasPageNum = /\d+$/.test(text) || /\.\s*\d+/.test(text);
       const isChapterHeader = text.startsWith('CAPÍTULO') || text.startsWith('CAPITULO');
-      const isPrelim = ['DEDICATORIA', 'AGRADECIMIENTOS', 'ÍNDICE DE TABLAS', 'ÍNDICE DE FIGURAS', 'ÍNDICE DE ANEXOS', 'ACRÓNIMOS', 'RESUMEN', 'ABSTRACT'].some(k => text.includes(k));
+      const isPrelim = ['DEDICATORIA', 'AGRADECIMIENTOS', 'ÍNDICE GENERAL', 'INDICE GENERAL', 'ÍNDICE DE TABLAS', 'ÍNDICE DE FIGURAS', 'ÍNDICE DE ANEXOS', 'ACRÓNIMOS', 'RESUMEN', 'ABSTRACT'].some(k => text.includes(k));
       const isFinal = ['V. CONCLUSIONES', 'VI. RECOMENDACIONES', 'VII. REFERENCIAS BIBLIOGRÁFICAS', 'ANEXOS'].some(k => text.includes(k));
 
       if (!hasPageNum && !isChapterHeader && !isPrelim && text.length > 50) {
@@ -701,8 +809,30 @@ class RuleEngine {
   }
 
   verificarJerarquiaTitulos() {
+    const firstIndexIdx = this.paragraphs.findIndex(p => p.text.toUpperCase().includes('ÍNDICE GENERAL') || p.text.toUpperCase().includes('INDICE GENERAL'));
+    
+    const bodyStartIdx = this.paragraphs.findIndex((p, i) => {
+      if (i < firstIndexIdx) return false;
+      const txt = p.text.trim().toUpperCase();
+      const isIndexLine = txt.includes('....') || /\d+$/.test(txt);
+      return !isIndexLine && (txt.startsWith('CAPÍTULO I') || txt.startsWith('CAPITULO I') || txt.startsWith('INTRODUCCIÓN') || txt.startsWith('INTRODUCCION'));
+    });
+
     this.paragraphs.forEach((p, idx) => {
       const texto = p.text.trim();
+      
+      // Excluir si está antes del inicio del cuerpo
+      if (bodyStartIdx !== -1 && idx < bodyStartIdx) return;
+      
+      // Excluir si es una línea de índice
+      const isIndexLine = texto.includes('....') || /\d+$/.test(texto);
+      if (isIndexLine) return;
+      
+      // Excluir si contiene palabras clave preliminares
+      const upper = texto.toUpperCase();
+      const isPrelim = ['DEDICATORIA', 'AGRADECIMIENTOS', 'ÍNDICE GENERAL', 'INDICE GENERAL', 'ÍNDICE DE TABLAS', 'ÍNDICE DE FIGURAS', 'ÍNDICE DE ANEXOS', 'ACRÓNIMOS', 'RESUMEN', 'ABSTRACT'].some(k => upper.includes(k));
+      if (isPrelim) return;
+
       const numMatch = texto.match(/^(\d+(\.\d+)*)\.?\s+(.+)$/);
       if (!numMatch) return;
 

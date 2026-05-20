@@ -1,0 +1,1248 @@
+--- PAGE 1 ---
+ 
+  
+ 
+ 
+ 
+ 
+GUÍA DE PRESENTACIÓN DE TESIS 2.0 
+(Pregrado) 
+ 
+ 
+Repositorio Institucional Digital 
+ 
+ 
+ 
+ 
+Puno - 2025 
+
+--- PAGE 2 ---
+ 
+CONTENIDO GENERAL 
+Tamaño de página:    
+A4 
+Tipo de letra:   
+ 
+Times New Roman 
+Tamaño de fuente: 
+ 
+12 puntos, excepto los capítulos y títulos principales. 
+Color de fuente:  
+ 
+Negro 
+Color de página:  
+ 
+Sin color 
+Margen (Pag. Vertical): 
+Margen Izquierdo 3.5 cm 
+ 
+ 
+ 
+ 
+Margen derecho 2.5 cm 
+Margen superior 2.5 cm 
+Margen inferior 2.5 cm 
+Numeración de página:  
+Centrado – parte inferior de la hoja. 
+La numeración se cuenta mentalmente a partir de la 
+primera página (portada) hasta la lista de acrónimos, solo 
+a partir del resumen debe marcarse el número. 
+Interlineado:   
+ 
+2.0  
+Sangría: 
+ 
+ 
+Sangría de primera línea de 1.25 cm para cada párrafo. 
+(no use la barra espaciadora para crear sangría). 
+Espacio entre párrafos: 
+Espaciado anterior 0pto, espaciado posterior 10pto. 
+Viñetas: 
+ 
+ 
+Letras (a.), guiones y puntos 
+ 
+ 
+REFERENCIAS: 
+- 
+Guía de presentación de TESIS – Repositorio UNA Puno 
+Resolución rectoral N° 3479-2018-R-UNA 
+- 
+Formato APA SEPTIMA EDICIÓN 
+- 
+Formato Vancouver 
+ 
+ 
+ 
+
+--- PAGE 3 ---
+ 
+ESTRUCTURA 
+ 
+ 
+VII. REFERENCIAS 
+BIBLIOGRÁFICAS 
+(Obligatorio) 
+ANEXOS 
+(Obligatorio) 
+VI. RECOMENDACIONES 
+(Obligatorio) 
+V. CONCLUSIONES 
+(Obligatorio) 
+CAPÍTULO IV 
+RESULTADOS Y DISCUSIÓN 
+(Obligatorio) 
+CAPÍTULO III 
+MATERIALES Y MÉTODOS 
+(Obligatorio) 
+CAPÍTULO II 
+REVISIÓN DE LITERATURA 
+(Obligatorio) 
+CAPÍTULO I 
+INTRODUCCIÓN 
+(Obligatorio) 
+ABSTRACT 
+(Obligatorio) 
+RESUMEN 
+(Obligatorio) 
+ 
+ACRÓNIMOS 
+(Si corresponde) 
+ÍNDICE DE ANEXOS 
+(Si corresponde) 
+ÍNDICE DE FIGURAS 
+(Si corresponde) 
+ÍNDICE GENERAL 
+(Obligatorio) 
+0000 
+AGRADECIMIENTOS 
+(Obligatorio) 
+DEDICATORIA 
+(Obligatorio) 
+REPORTE DE 
+SIMILITUD 
+(Obligatorio) 
+HOJA DE JURADOS 
+(Obligatorio) 
+CUERPO DE LA TESIS 
+PÁGINAS 
+PRELIMINARES 
+ÍNDICE DE TABLAS 
+(Si corresponde) 
+PORTADA 
+(Obligatorio) 
+
+--- PAGE 4 ---
+ 
+UNIVERSIDAD NACIONAL DEL ALTIPLANO 
+FACULTAD DE CIENCIAS SOCIALES 
+ESCUELA PROFESIONAL DE SOCIOLOGÍA 
+ 
+ EXPLORACIÓN DE LA IDENTIDAD CULTURAL PERUANA: 
+TRADICIONES, PATRIMONIO Y PERSPECTIVAS EN EL 
+SIGLO XXI 
+TESIS 
+PRESENTADA POR: 
+JUAN CARLOS PEREZ MAMANI 
+PARA OPTAR EL TÍTULO PROFESIONAL DE: 
+LICENCIADO EN SOCIOLOGÍA 
+PUNO - PERÚ 
+2024 
+ 
+ 
+ 
+18ptos 
+16ptos 
+14ptos 
+14ptos 
+14ptos 
+14ptos 
+16ptos 
+14ptos 
+16ptos 
+14ptos 
+14ptos 
+Espaciado: anterior 0pto 
+y posterior 0pto 
+Interlineado: 1.5 
+Espaciado: anterior 25pto y posterior 20pto 
+Interlineado: 2.0 
+Espaciado: anterior 0pto 
+y posterior 15pto 
+Interlineado: 1.5 
+Espaciado: anterior 
+0pto y posterior 0pto 
+Interlineado: 2.0 
+Espaciado: anterior 
+0pto y posterior 0pto 
+Interlineado: 2.0 
+Espaciado: anterior 
+0pto y posterior 10pto 
+Interlineado: 2.0 
+Espaciado: anterior 
+0pto y posterior 10pto 
+Interlineado: 2.0 
+Espaciado: anterior 
+0pto y posterior 0pto 
+Interlineado: 2.0 
+NOTA: El contenido de la portada estará centrado en su totalidad, en negrita y sin sangría de ningún tipo. 
+ 
+Año de Sustentación 
+DIMENSIONES DEL LOGO 
+Ancho: 4.33cm 
+Alto: 4.68cm 
+
+--- PAGE 5 ---
+ 
+REPORTE DE SIMILITUD 
+ 
+ 
+ 
+Título de la Tesis 
+Nombre completo del autor de la Tesis 
+Cantidad de páginas 
+de la versión final 
+de la Tesis 
+
+--- PAGE 6 ---
+ 
+ 
+ 
+ 
+Firma del ASESOR 
+Firma de la Unidad de Investigación 
+NOTA:  
+1. Ambas firmas en físico o digital, no combinación entre ellas. 
+2. El reporte de similitud es de la versión final de la Tesis 
+ 
+El porcentaje de similitud no deberá superar el 20% 
+
+--- PAGE 7 ---
+ 
+UNIVERSIDAD NACIONAL DEL ALTIPLANO 
+FACULTAD DE CIENCIAS SOCIALES 
+ESCUELA PROFESIONAL DE SOCIOLOGÍA 
+EXPLORACIÓN DE LA IDENTIDAD CULTURAL PERUANA: 
+TRADICIONES, PATRIMONIO Y PERSPECTIVAS EN EL SIGLO XXI  
+TESIS PRESENTADA POR: 
+JUAN CARLOS PEREZ MAMANI 
+PARA OPTAR EL TÍTULO PROFESIONAL DE: 
+LICENCIADO EN SOCIOLOGÍA 
+APROBADA POR EL JURADO REVISOR CONFORMADO POR: 
+PRESIDENTE: 
+………………………………………..………………. 
+Dr. JUAN CARLOS CONDORI MERMA 
+PRIMER MIEMBRO: 
+………………………………………..………………. 
+D.Sc. RONALD EDY QUISPE ARI 
+SEGUNDO MIEMBRO:   
+………………………………………..………………. 
+M.Sc. JORGE MAMANI CASTRO 
+ASESOR DE TESIS: 
+………………………………………..………………. 
+D.Sc. MIGUEL FRANCISCO GONZALES TITO 
+ÁREA : Ciencias sociales 
+TEMA: Cultura andina, identidad y desarrollo 
+FECHA DE SUSTENTACIÓN: 31 de diciembre de 2024 
+ 
+ 
+ 
+Espaciado: anterior 
+0pto y posterior 0pto  
+Alineación: centro 
+Estilo de fuente: negrita 
+NOTA: El contenido de la hoja de jurados se presentará con interlineado 1.5 en su totalidad y con un tamaño 
+de letra de 12ptos, a excepción del nombre de los jurados, que tendrá un tamaño de letra de 11ptos. 
+Espaciado: anterior 10pto 
+y posterior 10pto 
+Alineación: centro 
+Estilo de fuente: sin 
+i
+Espaciado: anterior 0pto y 
+posterior 0pto 
+Alineación: centro 
+Estilo de fuente: sin 
+i
+Espaciado: anterior 
+0pto y posterior 10pto  
+Alineación: centro 
+Estilo de fuente: negrita 
+Espaciado: anterior 0pto y posterior 30pto 
+Estilo de fuente: sin negrita, Sangría: izquierda 6cm 
+Espaciado: anterior 0pto 
+y posterior 0pto  
+Alineación: izquierda 
+Estilo de fuente: negrita 
+Sangría: sin sangría de 
+ningún tipo 
+Espaciado: anterior 0pto y posterior 30pto 
+Estilo de fuente: sin negrita, Sangría: izquierda 6cm 
+Espaciado: anterior 0pto y posterior 30pto 
+Estilo de fuente: sin negrita, Sangría: izquierda 6cm 
+Espaciado: anterior 0pto y posterior 30pto 
+Estilo de fuente: sin negrita, Sangría: izquierda 6cm 
+Espaciado: anterior 0pto y 
+posterior 30pto  
+Alineación: izquierda 
+Estilo de fuente: sin negrita 
+Sangría: sin sangría de ningún tipo 
+MAYÚSCULA 
+Espaciado: anterior 0pto 
+y posterior 0pto  
+Alineación: izquierda 
+Estilo de fuente: negrita 
+Sangría: sin sangría de 
+ningún tipo 
+MINÚSCULA  
+Espaciado: anterior 0pto y posterior 0pto, Alineación: izquierda 
+Estilo de fuente: sin negrita, Sangría: sin sangría de ningún tipo 
+Espaciado: anterior 10pto y posterior 0pto, Alineación: derecha 
+Estilo de fuente: negrita, Sangría: sin sangría de ningún tipo 
+ 
+MAYÚSCULA 
+
+--- PAGE 8 ---
+ 
+DEDICATORIA 
+Dedico este trabajo a [persona o personas importantes en tu vida], por su amor, apoyo y 
+aliento en todo momento. Gracias por ser mi fuente de inspiración y por enseñarme a 
+perseguir mis sueños con pasión y determinación. Este logro no habría sido posible sin 
+su constante apoyo y confianza en mí. 
+ 
+Juan Carlos Perez Mamani 
+ 
+ 
+ 
+Al redactar la dedicatoria, ten en cuenta lo siguiente: 
+1. En una página el autor puede dedicar la TESIS a quien (es) estime (n) conveniente. 
+2. Si son dos tesistas, cada uno debe redactar su dedicatoria en páginas separadas. 
+3. La dedicatoria puede ser escrita con cualquier tipo de fuente y estilo de fuente. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+16ptos 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+
+--- PAGE 9 ---
+ 
+AGRADECIMIENTOS 
+Quiero expresar mi más sincero agradecimiento a todas las personas que han contribuido 
+de alguna manera en la realización de esta tesis. 
+En primer lugar, A la Universidad Nacional del altiplano, Faculta de [nombre de la 
+facultad], Escuela Profesional de [nombre de la escuela Profesional] por su formación 
+profesional. 
+Agradecer a mi director/asesor de tesis, [nombre completo], por su orientación, paciencia 
+y apoyo constante a lo largo de todo el proceso de investigación. Sus valiosas sugerencias 
+y comentarios han sido fundamentales para lograr los objetivos propuestos. 
+También quiero agradecer a [nombre completo], [nombre completo] y [nombre completo] 
+por su colaboración en la realización de entrevistas y encuestas, lo que ha permitido 
+obtener datos valiosos para el desarrollo de esta investigación. 
+ 
+Juan Carlos Perez Mamani 
+Pedro Quispe Huamán 
+ 
+ 
+ 
+Al redactar los AGRADECIMIENTOS, ten en cuenta lo siguiente: 
+1. En una página el(los) autor(es) agradece(n) la colaboración de aquellas personas (docentes, 
+asesores) y/o instituciones (Universidad nacional del altiplano de Puno, facultad, escuela 
+profesional) que han permitido el desarrollo de la TESIS. 
+2. Si son dos tesistas, en la parte final de los agradecimientos se incluirá el nombre de ambos, y estos 
+deberán de estar alineados a la derecha. 
+3. Los agradecimientos pueden ser escritas con cualquier tipo de fuente y estilo de fuente. 
+ 
+ 
+16ptos 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+
+--- PAGE 10 ---
+ 
+ÍNDICE GENERAL 
+Pág. 
+DEDICATORIA 
+AGRADECIMIENTOS 
+ÍNDICE GENERAL 
+ÍNDICE DE TABLAS 
+ÍNDICE DE FIGURAS 
+ÍNDICE DE ANEXOS 
+ACRÓNIMOS 
+RESUMEN .................................................................................................................... 12 
+ABSTRACT ................................................................................................................... 13 
+CAPÍTULO I 
+INTRODUCCIÓN 
+1.1. 
+TÍTULO DE NIVEL 2 ...................................................................................... 14 
+1.1.1. Título de nivel 3 ...................................................................................... 14 
+CAPÍTULO II 
+REVISIÓN DE LITERATURA 
+2.1. 
+TÍTULO DE NIVEL 2 ...................................................................................... 15 
+2.2. 
+TÍTULO DE NIVEL 2 ...................................................................................... 15 
+2.2.1. Título de nivel 3 ...................................................................................... 15 
+2.2.1.1. Título de nivel 4 ........................................................................ 15 
+2.2.1.2. Título de nivel 4 ........................................................................ 15 
+CAPÍTULO III 
+MATERIALES Y MÉTODOS 
+3.1. 
+TÍTULO DE NIVEL 2 ...................................................................................... 16 
+16ptos 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+Espaciado: anterior 0pto y posterior 0pto, Alineación: 
+derecha, Interlineado: 1.5, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+Los títulos siguientes deben tener 
+hipervínculos que los dirijan a la 
+página correspondiente, y no 
+deben tener relleno ni numeración 
+TITULOS DE NIVEL 1 
+Alineación: justificada, 
+Sangría: sin sangría de 
+ningún tipo 
+ 
+El capítulo I sin numeración y sin relleno 
+Alineación: centrada 
+Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+El capítulo II sin numeración y 
+sin relleno 
+Alineación: centrada 
+Estilo de fuente: negrita 
+Sangría: sin sangría de ningún 
+tipo 
+El capítulo II sin numeración y 
+sin relleno 
+Alineación: centrada 
+Estilo de fuente: negrita 
+Sangría: sin sangría de ningún 
+tipo 
+TITULOS DE NIVEL 2 
+Alineación: justificada, 
+Sangría Izquierda: 0cm, 
+sangría francesa: 
+1.25cm 
+TITULOS DE NIVEL 3 
+Alineación: justificada, 
+Sangría Izquierda: 1.25cm, 
+sangría francesa: 1.25cm 
+TITULOS DE NIVEL 4 Y 5 
+Alineación: justificada, Sangría 
+Izquierda: 2.5cm, sangría francesa: 
+1 5
+12ptos 
+El contenido del índice 
+genera deberá tener la 
+siguiente configuración: 
+Interlineado: 2.0 
+Espaciado: anterior 0pto y 
+posterior 0pto 
+
+--- PAGE 11 ---
+ 
+3.2. 
+TÍTULO DE NIVEL 2 ...................................................................................... 16 
+CAPÍTULO IV 
+RESULTADOS Y DISCUSIÓN 
+4.1. 
+TÍTULO DE NIVEL 2 ...................................................................................... 17 
+3.2.1. Título de nivel 3 ...................................................................................... 17 
+V. CONCLUSIONES .................................................................................................... 19 
+VI. RECOMENDACIONES ........................................................................................ 20 
+VII. REFERENCIAS BIBLIOGRÁFICAS ................................................................ 20 
+ANEXOS ........................................................................................................................ 22 
+ 
+ 
+ 
+Al insertar el ÍNDICE GENERAL, ten en cuenta lo siguiente: 
+1. Los títulos y subtítulos que aparecen en el índice general deben estar enlazados con hipervínculos 
+(índice automático). 
+2. A partir del título del resumen, es necesario incluir el relleno y la numeración, excepto en los 
+capítulos y el título de los capítulos.  
+3. Los títulos de nivel 1 y 2 en negrita y con letras mayúsculas, mientras que los títulos de nivel 3, 4 
+y 5 no llevan negrita y se escriben en letras minúsculas. 
+4. Los títulos que se listan en el índice general deben presentarse sin cursiva ni subrayado, excepto 
+de los nombres científicos y su justificación debe respetar los diferentes niveles. 
+5. Es necesario incluir en el índice general todos los títulos de nivel 1, 2, 3, 4 o 5 que se encuentren 
+en el contenido de la tesis. 
+ 
+LOS CAPÍTULOS V, VI, 
+VII y ANEXOS 
+Alineación: justificada, 
+Sangría: sin sangría de 
+ningún tipo 
+ 
+El capítulo IV sin numeración y 
+sin relleno 
+Alineación: centrada 
+Estilo de fuente: negrita 
+Sangría: sin sangría de ningún 
+tipo 
+Los rellenos estarán representados por puntos 
+12ptos 
+
+--- PAGE 12 ---
+ 
+ÍNDICE DE TABLAS 
+Pág. 
+Tabla 1  
+Título descriptivo de la tabla ........................................................................ 24 
+Tabla 2  
+Título descriptivo de la tabla ........................................................................ 25 
+Tabla 3  
+Título descriptivo de la tabla ........................................................................ 29 
+ 
+ 
+ 
+ 
+Al insertar el ÍNDICE DE TABLAS, ten en cuenta lo siguiente: 
+1. El índice debe incluir hipervínculos (índice automático) que redireccionen a las páginas 
+correspondientes, tanto en el archivo de Word como en el PDF. De esta manera, los lectores podrán 
+hacer clic en los títulos del índice y serán llevados directamente a la página indicada. 
+2. Los nombres científicos pueden ser escritos en letras cursivas. 
+3. Cuando el número de tablas excede las 50, se aplicará un interlineado de 1.5 (solo en el índice) 
+4. El texto “Pág.” Deberá tener:  
+Espaciado: anterior 0pto y posterior 0pto,  
+Alineación: derecha  
+Interlineado: 1.5  
+Estilo de fuente: negrita  
+Sangría: sin sangría de ningún tipo 
+ 
+ 
+ 
+16ptos 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+12ptos 
+Espaciado: anterior 0pto y posterior 0pto, Alineación: justificada, Interlineado: 2.0,  
+Estilo de fuente: sin negrita y sin cursiva, Sangría izquierda: 0cm, sangría francesa: 2.0cm 
+
+--- PAGE 13 ---
+ 
+ÍNDICE DE FIGURAS 
+Pág. 
+Figura 1  
+Título descriptivo de la figura .................................................................... 25 
+Figura 2  
+Título descriptivo de la figura .................................................................... 26 
+Figura 3  
+Título descriptivo de la figura .................................................................... 30 
+ 
+ 
+ 
+ 
+Al insertar el ÍNDICE DE FIGURAS, ten en cuenta lo siguiente: 
+1. El índice debe incluir hipervínculos (índice automático) que redireccionen a las páginas 
+correspondientes, tanto en el archivo de Word como en el PDF. De esta manera, los lectores podrán 
+hacer clic en los títulos del índice y serán llevados directamente a la página indicada. 
+2. Los nombres científicos pueden ser escritos en letras cursivas. 
+3. Cuando el número de figuras supere las 50, se aplicará un interlineado de 1.5 (solo en el índice) 
+4. El texto “Pág.” Deberá tener:  
+Espaciado: anterior 0pto y posterior 0pto,  
+Alineación: derecha  
+Interlineado: 1.5  
+Estilo de fuente: negrita  
+Sangría: sin sangría de ningún tipo 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+16ptos 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+12ptos 
+Espaciado: anterior 0pto y posterior 0pto, Alineación: justificada, Interlineado: 2.0,  
+Estilo de fuente: sin negrita y sin cursiva, Sangría izquierda: 0cm, sangría francesa: 2.15cm 
+Los rellenos estarán representados por puntos 
+
+--- PAGE 14 ---
+ 
+ÍNDICE DE ANEXOS 
+Pág. 
+Anexo 1  
+Título del anexo ......................................................................................... 98 
+Anexo 2  
+Título del anexo ....................................................................................... 100 
+Anexo 3  
+Título del anexo ....................................................................................... 105 
+ 
+ 
+ 
+ 
+Al insertar el ÍNDICE DE ANEXOS, ten en cuenta lo siguiente: 
+1. El índice debe incluir hipervínculos (índice automático) que redireccionen a las páginas 
+correspondientes, tanto en el archivo de Word como en el PDF. De esta manera, los lectores podrán 
+hacer clic en los títulos del índice y serán llevados directamente a la página indicada. 
+2. Los nombres científicos pueden ser escritos en letras cursivas. 
+3. El texto “Pág.” Deberá tener:  
+Espaciado: anterior 0pto y posterior 0pto,  
+Alineación: derecha  
+Interlineado: 1.5  
+Estilo de fuente: negrita  
+Sangría: sin sangría de ningún tipo 
+ 
+ 
+ 
+ 
+16ptos 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+Espaciado: anterior 0pto y posterior 0pto, Alineación: justificada, Interlineado: 2.0,  
+Estilo de fuente: sin negrita y sin cursiva, Sangría izquierda: 0cm, sangría francesa: 2.25cm 
+12ptos 
+
+--- PAGE 15 ---
+ 
+ACRÓNIMOS 
+OMS:  
+Organización Mundial de la Salud 
+INEI:  
+ 
+Instituto Nacional de Estadística e Informática 
+Ro:  
+ 
+ 
+Coeficiente Básico de Reducción de la Fuerzas Sísmicas 
+ 
+ 
+ 
+ 
+ 
+Al redactar los ACRÓNIMOS, ten en cuenta lo siguiente: 
+1. Si la lista de acrónimos es muy larga, se recomienda utilizar un interlineado de 1.5 o 1.0 para 
+facilitar su lectura 
+2. Los acrónimos o abreviaturas se escriben sin negrita, seguido de dos puntos (:) y alineado al 
+margen izquierdo. 
+Acrónimo o abreviatura 
+Significado del acrónimo o abreviatura 
+16ptos 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+12ptos 
+Espaciado: anterior 
+0pto y posterior 0pto, 
+Alineación: izquierda, 
+Interlineado: 2.0,  
+Estilo de fuente: sin 
+negrita y sin cursiva, 
+Sangría izquierda: 
+0cm, sangría 
+francesa: 3.75cm 
+
+--- PAGE 16 ---
+12 
+RESUMEN 
+La presente tesis tiene como objetivo principal explorar la identidad cultural peruana en 
+el siglo XXI, centrándose en las tradiciones arraigadas, el valioso patrimonio y las 
+perspectivas emergentes. Perú, un país con una historia rica y diversa, alberga una fusión 
+única de culturas ancestrales y la influencia colonial española, lo que ha dejado una marca 
+profunda en su identidad contemporánea. En primer lugar, se examinan las tradiciones 
+culturales peruanas que han perdurado a lo largo del tiempo. Desde las civilizaciones 
+antiguas hasta las festividades y prácticas contemporáneas, se analiza cómo estas 
+tradiciones se han transmitido de generación en generación y han resistido los cambios 
+culturales y sociales. En segundo lugar, se aborda el valioso patrimonio peruano, que 
+incluye monumentos arquitectónicos, sitios arqueológicos, artefactos históricos y 
+manifestaciones culturales. Se explora su importancia histórica y cultural, así como los 
+desafíos a los que se enfrenta en cuanto a su preservación y protección en el siglo XXI. 
+Por último, se investigan las perspectivas emergentes sobre la identidad cultural peruana 
+en el contexto del siglo actual. Se analiza cómo la migración, la urbanización y la 
+influencia de los medios de comunicación han dado lugar a nuevas formas de expresión 
+y reinterpretación de la cultura peruana. Además, se examina la diversidad étnica y 
+cultural del país, así como los debates en torno a la inclusión, la igualdad y el respeto a 
+las diferencias. 
+Palabras clave: Identidad cultural peruana, Patrimonio, Perspectivas, Siglo XXI, 
+Tradiciones.  
+ 
+ 
+ 
+NOTA: El resumen 
+debe redactarse de 
+manera clara y breve 
+el estudio de 250 o 
+300 palabras. 
+ 
+Espaciado: anterior 0pto 
+y posterior 10pto  
+Alineación: justificada 
+Estilo de fuente: normal 
+Interlineado: 2.0 
+Sangría: sin sangría de 
+ningún tipo 
+ 
+ 
+El texto “Palabras clave:” debe estar escrita en negrita y minúscula (la primera letra en mayúscula) seguido del dos 
+puntos (:) 
+Las palabras clave deben estar escritas en minúscula, con la 
+primera letra en mayúscula y separadas por comas (,). Además, 
+deben estar ordenadas alfabéticamente 
+12ptos 
+16ptos 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+
+--- PAGE 17 ---
+13 
+ABSTRACT 
+The present thesis aims to explore the Peruvian cultural identity in the 21st century, focusing on 
+rooted traditions, valuable heritage, and emerging perspectives. Peru, a country with a rich and 
+diverse history, harbors a unique fusion of ancestral cultures and the influence of Spanish 
+colonialism, which has deeply shaped its contemporary identity. Firstly, Peruvian cultural 
+traditions that have endured over time are examined, from ancient civilizations to contemporary 
+festivities and practices. The analysis delves into how these traditions have been passed down 
+from generation to generation and have withstood cultural and social changes. Secondly, the 
+valuable Peruvian heritage is addressed, including architectural monuments, archaeological sites, 
+historical artifacts, and cultural manifestations. Its historical and cultural significance is explored, 
+along with the challenges it faces in terms of preservation and protection in the 21st century. 
+Lastly, emerging perspectives on Peruvian cultural identity in the context of the present century 
+are investigated. The analysis explores how migration, urbanization, and the influence of media 
+have given rise to new forms of expression and reinterpretation of Peruvian culture. Furthermore, 
+the ethnic and cultural diversity of the country is examined, along with debates surrounding 
+inclusion, equality, and respect for differences. 
+Keywords: Peruvian cultural identity, Heritage, Perspectives, 21st century, Traditions. 
+ 
+ 
+16ptos 
+12ptos
+Espaciado: anterior 0pto 
+y posterior 10pto  
+Alineación: justificada 
+Estilo de fuente: normal 
+Interlineado: 2.0 
+Sangría: sin sangría de 
+ningún tipo 
+ 
+ 
+El texto “Keywords:” debe estar escrita en negrita y minúscula (la primera letra en mayúscula) seguido del dos 
+puntos (:) 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+
+--- PAGE 18 ---
+14 
+CAPÍTULO I 
+INTRODUCCIÓN 
+En el siglo XXI, la identidad cultural peruana se ha convertido en un tema de gran 
+relevancia y exploración. Perú, un país rico en historia y diversidad, alberga una fusión 
+única de tradiciones, patrimonio y perspectivas que reflejan la riqueza de su legado 
+cultural. La presente tesis se adentra en el fascinante mundo de la identidad cultural 
+peruana, examinando sus tradiciones arraigadas, su valioso patrimonio y las perspectivas 
+emergentes en el contexto del siglo actual.  
+1.1. 
+TÍTULO DE NIVEL 2 
+El Perú, con una historia que se remonta a milenios atrás, ha sido hogar de diversas 
+culturas ancestrales que han dejado huella en su identidad contemporánea. Desde las 
+antiguas civilizaciones como los Incas, Moche y Nazca hasta la influencia colonial 
+española, cada uno de estos legados ha dejado una marca indeleble en la cultura peruana. 
+1.1.1. Título de nivel 3 
+El patrimonio peruano, compuesto por monumentos arquitectónicos, sitios 
+arqueológicos, artefactos históricos y manifestaciones culturales, es un tesoro 
+invaluable que refleja la historia y la identidad del país. 
+- 
+Viñeta numero 1 
+- 
+Viñeta numero 2 
+- 
+Viñeta número n 
+ 
+ 
+16ptos 
+14ptos 
+Espaciado: anterior 0pto y posterior 5pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+12ptos
+PARA LOS TITULOS DE NIVEL 2 (EN MAYÚSCULA) 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: justificada, 
+Interlineado: 2.0, Estilo de fuente: negrita, Sangría Izquierda: 0cm, sangría 
+francesa: 1.25cm 
+PARA ELCONTENIDO 
+DE TÍTULOS DE NIVEL 1 
+Espaciado: anterior 
+0pto y posterior 10pto, 
+Alineación: justificada, 
+Interlineado: 2.0, Estilo 
+de fuente: normal, 
+Sangría Izquierda: 0cm, 
+sangría de primera 
+línea: 1.25cm 
+PARA ELCONTENIDO 
+DE TÍTULOS DE NIVEL 2 
+Espaciado: anterior 
+0pto y posterior 10pto, 
+Alineación: justificada, 
+Interlineado: 2.0, Estilo 
+de fuente: normal, 
+Sangría Izquierda: 0cm, 
+sangría de primera 
+línea: 1.25cm 
+PARA LOS TITULOS DE NIVEL 3 (EN MINÚSCULA) 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: justificada, 
+Interlineado: 2.0, Estilo de fuente: negrita, Sangría Izquierda: 1.25cm, 
+sangría francesa: 1.25cm 
+PARA EL CONTENIDO DE 
+TÍTULOS DE NIVEL 3 
+Espaciado: anterior 0pto y 
+posterior 10pto, Alineación: 
+justificada, Interlineado: 2.0, 
+Estilo de fuente: normal, Sangría 
+Izquierda: 1.25cm, sangría de 
+primera línea: 1.25cm 
+PARA LAS VIÑETAS 
+Espaciado: anterior 0pto y posterior 0pto, Alineación: justificada, 
+Interlineado: 2.0, Estilo de fuente: normal, Sangría Izquierda: (de 
+acuerdo al nivel del título que le corresponde),  
+sangría francesa: 0.75cm 
+La última viñeta tendrá:  
+Espaciado: anterior 0pto y posterior 10pto 
+Las viñetas en el contenido de títulos de nivel 1 y 2 con sangría 
+izquierda: 0.5cm, sangría francesa: 0.75cm 
+Las viñetas en el contenido de títulos de nivel 3 con sangría 
+izquierda: 1.75cm, sangría francesa: 0.75cm 
+ 
+Las viñetas en el contenido de títulos de nivel 4 y 5 con sangría 
+izquierda: 3.0cm, sangría francesa: 0.75cm 
+
+--- PAGE 19 ---
+15 
+CAPÍTULO II 
+REVISIÓN DE LITERATURA 
+2.1. 
+TÍTULO DE NIVEL 2 
+Estudios sobre impacto de la globalización en la identidad cultural peruana: 
+Explora investigaciones previas que hayan analizado cómo la globalización y la 
+influencia de las corrientes culturales externas han impactado en la identidad cultural 
+peruana.  
+2.2. 
+TÍTULO DE NIVEL 2 
+2.2.1. Título de nivel 3 
+La identidad cultural se refiere al conjunto de características, valores, 
+creencias, tradiciones, símbolos y prácticas que definen a un grupo humano y le 
+otorgan una sensación de pertenencia y continuidad histórica. 
+2.2.1.1. Título de nivel 4 
+Es importante destacar que la identidad cultural no implica una 
+homogeneidad absoluta dentro de un grupo o sociedad, ya que existen 
+diferencias individuales y subgrupos con identidades culturales diversas. 
+2.2.1.2. Título de nivel 4 
+A través de una investigación exhaustiva, se buscará comprender 
+cómo la identidad cultural peruana se está transformando y adaptando en 
+este nuevo contexto global, así como los desafíos y oportunidades que 
+enfrenta en su preservación y promoción 
+ 
+16ptos 
+14ptos 
+Espaciado: anterior 0pto y posterior 5pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+12ptos
+PARA EL CONTENIDO DE LOS 
+TÍTULOS DE NIVEL 4 y 5 
+Espaciado: anterior 0pto y 
+posterior 10pto, Alineación: 
+justificada, Interlineado: 2.0, 
+Estilo de fuente: normal, Sangría 
+Izquierda: 2.5cm, sangría de 
+primera línea: 1.25cm 
+PARA LOS TÍTULOS DE NIVEL 4 y 5 (EN MINÚSCULA) 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: justificada, 
+Interlineado: 2.0, Estilo de fuente: negrita, Sangría Izquierda: 2.5cm, 
+sangría francesa: 1.5cm 
+PARA LOS TÍTULOS DE NIVEL 4 y 5 (EN MINÚSCULA) 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: justificada, 
+Interlineado: 2.0, Estilo de fuente: negrita, Sangría Izquierda: 2.5cm, 
+sangría francesa: 1.5cm 
+PARA EL CONTENIDO DE LOS 
+TÍTULOS DE NIVEL 4 y 5 
+Espaciado: anterior 0pto y 
+posterior 10pto, Alineación: 
+justificada, Interlineado: 2.0, 
+Estilo de fuente: normal, Sangría 
+Izquierda: 2.5cm, sangría de 
+primera línea: 1.25cm 
+
+--- PAGE 20 ---
+16 
+CAPÍTULO III 
+MATERIALES Y MÉTODOS 
+3.1. 
+TÍTULO DE NIVEL 2 
+Este tipo de investigación busca describir y analizar en detalle las características, 
+manifestaciones y dinámicas de la identidad cultural peruana. Puedes realizar encuestas, 
+entrevistas, observaciones y análisis de contenido para recopilar datos y obtener una 
+comprensión precisa de la diversidad y complejidad de la identidad cultural en el contexto 
+peruano. 
+3.2. 
+TÍTULO DE NIVEL 2 
+Este enfoque se basa en recopilar datos en profundidad a través de técnicas como 
+entrevistas en profundidad, grupos focales y análisis de contenido. Puedes explorar las 
+experiencias, percepciones y significados atribuidos por individuos y comunidades a su 
+identidad cultural peruana. 
+• 
+Viñeta numero 1 
+- 
+Sub-viñeta 1 
+- 
+Sub-viñeta 2 
+- 
+Sub-viñeta n 
+• 
+Viñeta numero 2 
+- 
+Sub-viñeta 1 
+- 
+Sub-viñeta 2 
+• 
+Viñeta número 3 
+16ptos 
+14ptos 
+Espaciado: anterior 0pto y posterior 5pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+12ptos
+Las viñetas con un único tipo de símbolo  
+Las sub-viñetas con un único tipo de símbolo  
+
+--- PAGE 21 ---
+17 
+ 
+CAPÍTULO IV 
+RESULTADOS Y DISCUSIÓN 
+4.1. 
+TÍTULO DE NIVEL 2 
+ El estudio reveló que la diversidad cultural en el Perú ha generado la coexistencia 
+de múltiples identidades, tanto a nivel individual como colectivo. Se identificaron 
+diferentes elementos culturales, como idiomas, tradiciones, religiones y prácticas 
+cotidianas, que contribuyen a la formación de la identidad peruana. 
+4.1.1. Título de nivel 3 
+Es fundamental comprender cómo estas tradiciones se mantienen vivas en 
+el siglo XXI y cómo han evolucionado para adaptarse a los desafíos actuales. 
+Tabla 1 
+Titulo descriptivo de la tabla  
+Variables Categoría 1 Categoría 2 Categoría 3 
+Variable 1 
+xx 
+xx 
+xx 
+Variable 2 
+xx 
+xx 
+xx 
+Variable 3 
+xx 
+xx 
+xx 
+TOTAL 
+xx 
+xx 
+xx 
+Nota o Fuente: explicar o brinde información acerca de la tabla 
+ 
+ 
+Al redactar las tablas, ten en cuenta lo siguiente: 
+1. 
+Para incluir las tablas en la tesis, se requiere importarlas desde Excel u otros programas, en lugar de 
+incorporarlas como imágenes. 
+2. 
+El encabezado de las tablas deberá estar centrado y en negrita 
+3. 
+Si la tabla se extiende a lo largo de dos hojas, es necesario incluir el encabezado de la tabla en ambas páginas. 
+4. 
+Las tablas deben estar alineadas con el margen izquierdo del nivel del título al que pertenecen, excepto las 
+tablas de mayor tamaño. 
+ 
+Tamaño de letra: 12 puntos, Alineación: izquierda, Estilo de fuente: 
+negrita, Espaciado: anterior 0pto y posterior 0pto, Interlineado: 2.0 
+Sangría izquierda: al mismo nivel del título 
+Tamaño de letra: 12 puntos, Alineación: izquierda, Estilo 
+de fuente: cursiva, Espaciado: anterior 0pto y posterior 
+0pto, Interlineado: 2.0, Sangría izquierda: al mismo nivel 
+del título 
+16ptos 
+14ptos 
+El contenido de la tabla puede tener 
+interlineado 1.0 o 1.5 y debe ser 
+marcado por las líneas horizontales. 
+Tamaño de letra: 10ptos, Alineación: izquierda, Estilo de 
+fuente: normal, Espaciado: anterior 0pto y posterior 15pto, 
+Interlineado: 1.5, Sangría izquierda: al mismo nivel del título 
+Espaciado: anterior 0pto y posterior 5pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+12ptos
+
+--- PAGE 22 ---
+18 
+Figura 1 
+Titulo descriptivo de la figura  
+ 
+ 
+Nota o Fuente: explicar o brinde información acerca de la figura 
+ 
+ 
+Al redactar las figuras, ten en cuenta lo siguiente: 
+1. 
+Se consideran Figura a cualquier dibujo, fotografía o gráfico. 
+2. 
+Las figuras deben presentarse en una calidad óptima para asegurar una visualización clara y 
+comprensible de lo que representan. 
+3. 
+Si la figura ocupa dos páginas, se debe asegurar de que comience en el primer renglón de la página 
+siguiente 
+4. 
+Las figuras deben estar alineadas con el margen izquierdo del nivel del título al que pertenecen, 
+excepto las figuras de mayor tamaño. 
+ 
+ 
+ 
+0
+100
+200
+300
+400
+500
+600
+700
+800
+900
+1000
+Ene
+Feb
+Mar
+Abr
+May
+Jun
+Jul
+Ago
+Set
+Oct
+Nov
+Dic
+Producto 1
+Producto 2
+Tamaño de letra: 12 puntos, Alineación: izquierda, Estilo de fuente: 
+negrita, Espaciado: anterior 0pto y posterior 0pto, Interlineado: 2.0 
+Sangría izquierda: al mismo nivel del título 
+Tamaño de letra: 12 puntos, Alineación: izquierda, Estilo 
+de fuente: cursiva, Espaciado: anterior 0pto y posterior 
+0pto, Interlineado: 2.0, Sangría izquierda: al mismo nivel 
+del título 
+Tamaño de letra: 10ptos, Alineación: izquierda, Estilo de 
+fuente: normal, Espaciado: anterior 0pto y posterior 15pto, 
+Interlineado: 1.5, Sangría izquierda: al mismo nivel del título 
+
+--- PAGE 23 ---
+19 
+V. CONCLUSIONES 
+PRIMERA:  La tesis ha puesto de relieve los desafíos que enfrenta la identidad cultural 
+peruana en el siglo XXI, como la influencia de la globalización, el turismo 
+masivo y los cambios socioeconómicos. Sin embargo, también se han 
+identificado oportunidades para revitalizar y promover la cultura peruana, 
+como el uso de tecnologías digitales para difundir el patrimonio cultural, 
+la promoción del turismo sostenible y la educación en valores culturales 
+desde temprana edad.  
+ 
+ 
+- 
+La diversidad cultural como fortaleza: A lo largo de la investigación, se ha 
+evidenciado la riqueza y la diversidad de la identidad cultural peruana. La 
+coexistencia de múltiples tradiciones, lenguas y manifestaciones artísticas ha 
+enriquecido la sociedad peruana y la ha convertido en un referente a nivel mundial.  
+ 
+ 
+ 
+ 
+16ptos 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+12ptos
+12ptos
+Espaciado: anterior 0pto y posterior 10pto, Alineación: justificada, Interlineado: 2.0,  
+Estilo de fuente: sin negrita, Sangría izquierda: 0cm, sangría francesa: 2.5cm 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: justificada, Interlineado: 2.0,  
+Estilo de fuente: sin negrita, Sangría izquierda: 0cm, sangría francesa: 0.75cm 
+CASO 1 
+CASO 2 
+Para elaborar la lista de conclusiones, se pueden utilizar cualquiera de los CASOS que se proporcionan como 
+ejemplo. 
+
+--- PAGE 24 ---
+20 
+VI. RECOMENDACIONES 
+PRIMERA:  Fomentar la participación comunitaria: Para garantizar la preservación y 
+promoción de la identidad cultural peruana, es crucial fomentar la 
+participación activa de las comunidades locales. Se deben establecer 
+mecanismos que permitan a las comunidades tomar decisiones sobre la 
+gestión de su patrimonio cultural, facilitar su participación en proyectos 
+culturales y brindar apoyo para el desarrollo de emprendimientos 
+culturales locales.  
+ 
+ 
+- 
+Aplicar políticas de turismo sostenible: El turismo puede desempeñar un papel 
+importante en la promoción de la identidad cultural peruana, pero también presenta 
+desafíos. Es esencial implementar políticas de turismo sostenible que permitan 
+aprovechar los beneficios económicos del turismo mientras se minimiza su impacto 
+negativo en el patrimonio cultural y el entorno natural.  
+ 
+16ptos 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+12ptos
+CASO 1 
+CASO 2 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: justificada, Interlineado: 2.0,  
+Estilo de fuente: sin negrita, Sangría izquierda: 0cm, sangría francesa: 2.5cm 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: justificada, Interlineado: 2.0,  
+Estilo de fuente: sin negrita, Sangría izquierda: 0cm, sangría francesa: 0.75cm 
+Para elaborar la lista de recomendaciones, se pueden utilizar cualquiera de los CASOS que se proporcionan como 
+ejemplo. 
+12ptos
+
+--- PAGE 25 ---
+21 
+VII. REFERENCIAS BIBLIOGRÁFICAS 
+Chirinos, C. (2018). Identidad cultural peruana: De la diversidad a la unidad. Lima, 
+Perú: Fondo Editorial del Congreso del Perú. 
+Roca, G. (2020). Patrimonio cultural peruano: Retos y perspectivas. Lima, Perú: 
+Pontificia Universidad Católica del Perú. 
+Silva, F. (2019). Turismo cultural y desarrollo sostenible en el Perú. Revista de 
+Investigación en Turismo y Desarrollo Regional, 13(2), 189-203.  
+Instituto Nacional de Cultura. (2016). Plan nacional de salvaguardia del patrimonio 
+cultural inmaterial 2016-2021. Lima, Perú: Instituto Nacional de Cultura. 
+ 
+ 
+ 
+ 
+1. Chirinos C. Identidad cultural peruana: De la diversidad a la unidad. Fondo Editorial 
+del Congreso del Perú; 2018. 
+2. Roca G. Patrimonio cultural peruano: Retos y perspectivas. Pontificia Universidad 
+Católica del Perú; 2020. 
+3. Silva F. Turismo cultural y desarrollo sostenible en el Perú. Rev Investig Turismo 
+Desarro Regional. 2019;13(2):189-203. 
+4. Instituto Nacional de Cultura. Plan nacional de salvaguardia del patrimonio cultural 
+inmaterial 2016-2021. Instituto Nacional de Cultura; 2016. 
+ 
+ 
+ 
+16ptos 
+Espaciado: anterior 0pto y posterior 
+10pto, Alineación: centrada, Interlineado: 
+2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+12ptos
+12ptos
+Espaciado: anterior 0pto y posterior 10pto, Alineación: justificada, Interlineado: 1.5,  
+Estilo de fuente: sin negrita, Sangría izquierda: 0cm, sangría francesa: 1.25cm 
+Estilo APA 
+Estilo 
+Vancouver 
+Para citar referencias, se podrá utilizar el estilo APA, Vancouver, IEEE o de acuerdo al área de su especialidad. 
+Cada uno de estos estilos de cita tiene sus propias normas y formatos, por lo que es importante seleccionar el que 
+mejor se adapte a las necesidades y requisitos del texto o documento en cuestión. 
+
+--- PAGE 26 ---
+22 
+ANEXOS 
+Anexo 1. Titulo del anexo (sin negrita, la primera letra inicia en mayúscula y a continuación 
+con letras minúsculas) 
+Anexo 2. ……………………………………………………………………………………….. 
+Anexo 3. ……………………………………………………………………………………….. 
+ 
+ 
+Al redactar los ANEXOS, ten en cuenta lo siguiente: 
+1. 
+El título principal “ANEXOS” debe comenzar en el primer renglón. 
+2. 
+Los anexos se presentan en forma secuencial según su respectiva numeración arábica como:  
+Anexo 1, Anexo 2… Anexo N, seguido por un punto (.) y el título del anexo comenzara con una letra 
+mayúscula y continuando con letras minúsculas. 
+3. 
+Para los documentos se recomienda utilizar un escáner, para garantizar una mejor calidad en la 
+digitalización en lugar de fotografías ya que estas suelen tener un fondo oscuro que dificulta la 
+legibilidad. 
+4. 
+Los anexos de la tesis deben ajustarse a los márgenes establecidos, tanto en las páginas verticales 
+como en las horizontales. 
+5. 
+La numeración de página se considera hasta la última hoja de anexos, y asegurarse de que el 
+número total de páginas coincida con la cantidad de páginas en la tesis. 
+6. 
+Al final de los anexos, se debe incluir la Declaración Jurada de Autenticidad de la Tesis, así como la 
+Autorización para el Depósito de Tesis en el Repositorio Institucional. 
+ 
+ 
+16ptos 
+Espaciado: anterior 0pto y posterior 10pto, Alineación: 
+centrada, Interlineado: 2.0, Estilo de fuente: negrita 
+Sangría: sin sangría de ningún tipo 
+Interlineado: 2.0 
+Espaciado: anterior 0pto 
+y posterior 10pto  
+Alineación: izquierda 
+Estilo de fuente: negrita 
+Sangría: sin sangría de 
+ningún tipo 
+Tamaño: 12ptos 
+ 
+
+--- PAGE 27 ---
+23 
+Anexo N. Declaración jurada de autenticidad de tesis 
+ 
+ 
+ 
+ 
+Marcar 
+Marcar 
+Nombre de la 
+escuela profesional 
+Título de la tesis 
+El documento modelo se encuentra en el siguiente enlace: 
+http://repositorio.unap.edu.pe/handle/20.500.14082/19116 
+
+--- PAGE 28 ---
+24 
+Anexo N. Autorización para el depósito de tesis en el Repositorio Institucional 
+ 
+Marcar 
+Marcar 
+Marcar 
+Nombre de la 
+escuela profesional 
+Título de la tesis 
+El documento modelo se encuentra en el siguiente enlace: 
+http://repositorio.unap.edu.pe/handle/20.500.14082/19116 

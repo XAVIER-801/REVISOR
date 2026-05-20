@@ -39,9 +39,10 @@ class CapituloNivel2Auditor(BaseAuditor):
             norm = p['norm']
             bold = any(r.get('bold') for r in p.get('runs', []))
             align = p.get('alignment', 'left')
-            l_cm = round((p.get('indent_left') or 0) / 567.0, 2)
-            f_cm = round((p.get('indent_first') or 0) / 567.0, 2)
-            h_cm = round((p.get('indent_hanging') or 0) / 567.0, 2)
+            # Indents ya están en cm desde parse_ppr
+            l_cm = round(p.get('indent_left') or 0, 2)
+            f_cm = round(p.get('indent_first') or 0, 2)
+            h_cm = round(p.get('indent_hanging') or 0, 2)
 
             is_bullet = p.get('is_bullet', False)
             is_title = p.get('is_heading', False)

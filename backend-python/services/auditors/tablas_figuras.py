@@ -39,7 +39,7 @@ class TablasFigurasAuditor(BaseAuditor):
 
             upper = txt.upper()
             align = p.get('alignment', 'left')
-            l_cm = round((p.get('indent_left') or 0) / 567.0, 2)
+            l_cm = round(p.get('indent_left') or 0, 2)
             exp_l_cm = expected_indent(p.get('level', 1))
 
             is_table_label = re.match(r'^TABLA\s+\d+', upper)
@@ -100,7 +100,7 @@ class TablasFigurasAuditor(BaseAuditor):
                             is_italic = any(r.get('italic') for r in next_p.get('runs', []))
                             is_next_bold = any(r.get('bold') for r in next_p.get('runs', []))
                             n_align = next_p.get('alignment', 'left')
-                            n_l_cm = round((next_p.get('indent_left') or 0) / 567.0, 2)
+                            n_l_cm = round(next_p.get('indent_left') or 0, 2)
 
                             if (not is_italic) or is_next_bold:
                                 self._add("Tablas y Figuras", f"Estilo Título: {next_p['text'][:20]}...", "error",

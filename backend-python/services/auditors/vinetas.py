@@ -44,8 +44,8 @@ class VinetasAuditor(BaseAuditor):
 
             bold = any(r.get('bold') for r in p.get('runs', []))
             align = p.get('alignment', 'left')
-            l_cm = round((p.get('indent_left') or 0) / 567.0, 2)
-            h_cm = round((p.get('indent_hanging') or 0) / 567.0, 2)
+            l_cm = round(p.get('indent_left') or 0, 2)
+            h_cm = round(p.get('indent_hanging') or 0, 2)
 
             is_bullet, is_symbol_ok, detected_symbol = self._check_is_bullet(p, txt)
 

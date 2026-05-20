@@ -64,3 +64,9 @@ class ConfiguracionPaginaAuditor(BaseAuditor):
             found = any(m in s for s in self.sections_found)
             self._add("Configuración de Página", f"Sección: {m}", "passed" if found else "error",
                       f"La sección '{m}' es obligatoria.", "Presente", "No encontrada" if not found else "Encontrada")
+
+        # Verificar numeración de líneas (borradores)
+        has_lines = getattr(self.engine, 'has_line_numbering', False)
+        self._add("Configuración de Página", "Numeración de Líneas", "passed" if not has_lines else "error",
+                  "El documento de tesis final y limpio no debe contener numeración de líneas de página (solo se permite en borradores).",
+                  "Sin numeración de líneas", "El documento contiene numeración de líneas activa en sus secciones" if has_lines else "Sin numeración de líneas")

@@ -53,21 +53,22 @@ def parse_ppr(ppr_el):
     """Extrae propiedades de párrafo."""
     if ppr_el is None: return {}
     props = {}
-    
+
     # Alignment
     jc = ppr_el.find('w:jc', NSMAP)
     if jc is not None: props['alignment'] = _val(jc)
 
-    # Indents
+    # Indents (convertir de twips a cm: twips * 2.54 / 1440)
     ind = ppr_el.find('w:ind', NSMAP)
     if ind is not None:
         ns = f'{{{NSMAP["w"]}}}'
         l = ind.get(f'{ns}left') or ind.get(f'{ns}start')
         f = ind.get(f'{ns}firstLine')
         h = ind.get(f'{ns}hanging')
-        if l: props['indent_left'] = int(l)
-        if f: props['indent_first'] = int(f)
-        if h: props['indent_hanging'] = int(h)
+        # Convertir de twips a cm: dividir por 567.717 (≈ 1440/2.54)
+        if l: props['indent_left'] = round(int(l) * 2.54 / 1440, 3)
+        if f: props['indent_first'] = round(int(f) * 2.54 / 1440, 3)
+        if h: props['indent_hanging'] = round(int(h) * 2.54 / 1440, 3)
 
     # Style
     style = ppr_el.find('w:pStyle', NSMAP)

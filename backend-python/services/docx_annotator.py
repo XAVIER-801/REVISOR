@@ -131,10 +131,19 @@ class DocxAnnotator:
             if not p_text or p_text[:15] in p_txt_val:
                 return p
         
-        # 2. Fallback: Búsqueda por Texto (Si el documento cambió)
+        # 2. Fallback: Búsqueda por Texto cerca de p_idx
         if p_text and len(str(p_text).strip()) > 5:
             search_txt = str(p_text).strip()
-            for p in self._all_paragraphs:
+            
+            # Buscar en un radio de 50 párrafos alrededor de p_idx
+            if p_idx is not None:
+                start_idx = max(0, p_idx - 50)
+                end_idx = min(len(self._all_paragraphs), p_idx + 50)
+                search_range = self._all_paragraphs[start_idx:end_idx]
+            else:
+                search_range = self._all_paragraphs
+                
+            for p in search_range:
                 p_txt_val = getattr(p, '_cached_text', None) or p.text
                 if search_txt in p_txt_val: return p
                 

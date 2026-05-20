@@ -55,9 +55,9 @@ class CapituloNivel345Auditor(BaseAuditor):
             norm = p['norm']
             bold = any(r.get('bold') for r in p.get('runs', []))
             align = p.get('alignment', 'left')
-            l_cm = round((p.get('indent_left') or 0) / 567.0, 2)
-            f_cm = round((p.get('indent_first') or 0) / 567.0, 2)
-            h_cm = round((p.get('indent_hanging') or 0) / 567.0, 2)
+            l_cm = round(p.get('indent_left') or 0, 2)
+            f_cm = round(p.get('indent_first') or 0, 2)
+            h_cm = round(p.get('indent_hanging') or 0, 2)
 
             is_bullet = p.get('is_bullet', False)
             is_title = p.get('is_heading', False)
@@ -97,11 +97,11 @@ class CapituloNivel345Auditor(BaseAuditor):
                 # Espaciado
                 s_before = p.get('spacing_before', 0)
                 s_after = p.get('spacing_after', 0)
-                if s_before > 1.0:
+                if s_before > 0.5:
                     self._add("Jerarquía", f"Espaciado Anterior Título {level_label}", "error",
                               f"El título de {level_label.lower()} debe tener espaciado anterior de 0pt.",
                               "0pt", f"{s_before}pt", p_idx=p['index'], p_text=txt)
-                if abs(s_after - 10.0) > 1.0:
+                if abs(s_after - 10.0) > 0.5:
                     self._add("Jerarquía", f"Espaciado Posterior Título {level_label}", "error",
                               f"El título de {level_label.lower()} debe tener espaciado posterior de 10pt.",
                               "10pt", f"{s_after}pt", p_idx=p['index'], p_text=txt)
@@ -163,11 +163,13 @@ class CapituloNivel345Auditor(BaseAuditor):
                 continue
 
             # ═══ CONTENIDO bajo Nivel 3/4/5 ═══
-            if len(txt) <= 50:
-                continue
+            # Auditar TODOS los párrafos que no sean títulos, viñetas o notas
             if txt.upper().startswith("NOTA:") or txt.upper().startswith("FUENTE:"):
                 continue
             if re.match(r"^(TABLA|FIGURA)\s+\d+", norm):
+                continue
+            # Párrafos muy cortos pueden ser títulos o fragmentos
+            if len(txt) <= 10:
                 continue
 
             if bold:

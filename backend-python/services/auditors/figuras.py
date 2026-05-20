@@ -16,13 +16,17 @@ class FigurasAuditor(BaseAuditor):
     def audit(self):
         self._audit_figure_labels_and_titles()
 
+    def _get_expected_indent_for_level(self, level):
+        """Retorna sangría esperada para un nivel."""
+        if level in [1, 2]:
+            return 0.0
+        elif level == 3:
+            return 1.25
+        else:  # 4, 5
+            return 2.5
+
     def _audit_figure_labels_and_titles(self):
         """Audita etiquetas, títulos y notas/fuentes de figuras."""
-        def expected_indent(level):
-            if level in [1, 2]: return 0.0
-            elif level == 3: return 1.25
-            else: return 2.5
-
         for i, p in enumerate(self.paragraphs):
             txt = p['text'].strip()
             sec_upper = p.get('section', '').upper()
@@ -33,9 +37,11 @@ class FigurasAuditor(BaseAuditor):
 
             upper = txt.upper()
             align = p.get('alignment', 'left')
-            l_cm = round((p.get('indent_left') or 0) / 567.0, 2)
-            level = p.get('body_level') or p.get('level') or 1
-            exp_l_cm = expected_indent(level)
+            l_cm = round(p.get('indent_left') or 0, 2)
+
+            # Obtener el nivel contextual del título anterior
+            context_level = self._find_context_level(i)
+            exp_l_cm = self._get_expected_indent_for_level(context_level)
 
             is_figure_label = bool(re.match(r'^FIGURA\s+\d+', upper))
 
@@ -83,7 +89,7 @@ class FigurasAuditor(BaseAuditor):
 
                 if abs(l_cm - exp_l_cm) > 0.1:
                     self._add("Figuras", f"Sangría Etiqueta: {label_text}", "warning",
-                             f"La etiqueta de Figura debe tener la misma sangría que el título de Nivel {level} ({exp_l_cm}cm).",
+                             f"La etiqueta de Figura debe tener la misma sangría que el título de Nivel {context_level} ({exp_l_cm}cm).",
                              f"Izq {exp_l_cm}cm", f"Izq {l_cm}cm", p_idx=p['index'], p_text=txt)
 
                 # 2. Estilo (Negrita)
@@ -172,9 +178,8 @@ class FigurasAuditor(BaseAuditor):
                                      "El título descriptivo de la Figura debe estar alineado a la Izquierda.", "Izquierda", n_align, p_idx=next_p['index'], p_text=next_p['text'])
 
                         if abs(n_l_cm - exp_l_cm) > 0.1:
-                            next_level = next_p.get('body_level') or next_p.get('level') or 1
                             self._add("Figuras", f"Sangría Título: {next_p['text'][:20]}...", "warning",
-                                     f"El título descriptivo debe tener la misma sangría que el título de Nivel {next_level} ({exp_l_cm}cm).",
+                                     f"El título descriptivo debe tener la misma sangría que el título de Nivel {context_level} ({exp_l_cm}cm).",
                                      f"Izq {exp_l_cm}cm", f"Izq {n_l_cm}cm", p_idx=next_p['index'], p_text=next_p['text'])
 
                 # 3.b: Verificar presencia de Nota o Fuente para la Figura
@@ -265,10 +270,11 @@ class FigurasAuditor(BaseAuditor):
                                  "1.5", str(line_spacing), p_idx=p['index'], p_text=txt)
 
                     note_level = p.get('body_level') or p.get('level') or 1
-                    note_exp_l_cm = expected_indent(note_level)
+                    note_context_level = self._find_context_level(i)
+                    note_exp_l_cm = self._get_expected_indent_for_level(note_context_level)
                     if abs(l_cm - note_exp_l_cm) > 0.1:
                         self._add("Figuras", f"Sangría Nota: {txt[:15]}", "warning",
-                                 f"La nota/fuente de la figura debe tener la misma sangría que el título de Nivel {note_level} ({note_exp_l_cm}cm).",
+                                 f"La nota/fuente de la figura debe tener la misma sangría que el título de Nivel {note_context_level} ({note_exp_l_cm}cm).",
                                  f"Izq {note_exp_l_cm}cm", f"Izq {l_cm}cm", p_idx=p['index'], p_text=txt)
 
                     post_spacing = p.get('spacing_after', 0)
