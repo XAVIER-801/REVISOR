@@ -141,27 +141,70 @@ class StyleResolver:
         except: pass
 
     def _load_section_props(self):
+        """
+        Carga propiedades de TODAS las secciones (no solo la primera).
+        Cada sección puede tener orientación distinta (portrait/landscape) y
+        márgenes propios. La lista se guarda en self.section_props["sections"].
+
+        Para retrocompatibilidad, los valores de la PRIMERA sección se exponen
+        también en self.section_props['paper']/'margin_top'/etc.
+        """
         try:
             with zipfile.ZipFile(self.docx_path, 'r') as z:
                 root = etree.fromstring(z.read('word/document.xml'))
-            
-            sect = root.find('.//w:sectPr', NSMAP)
-            if sect is not None:
-                ns = f'{{{NSMAP["w"]}}}'
+
+            ns = f'{{{NSMAP["w"]}}}'
+            to_cm = lambda x: round(int(x) / 1440 * 2.54, 2) if x else 0
+
+            sections = []
+            # Todas las sectPr del documento (final + intermedias dentro de pPr)
+            for sect in root.iter(f'{ns}sectPr'):
                 pgSz = sect.find('w:pgSz', NSMAP)
+                section_data = {}
                 if pgSz is not None:
-                    w = int(pgSz.get(f'{ns}w')) / 1440 
-                    h = int(pgSz.get(f'{ns}h')) / 1440
-                    self.section_props['paper'] = 'A4' if abs(w-8.27)<0.1 and abs(h-11.69)<0.1 else f'{w:.1f}x{h:.1f}'
-                
+                    w_attr = pgSz.get(f'{ns}w')
+                    h_attr = pgSz.get(f'{ns}h')
+                    orient = pgSz.get(f'{ns}orient') or 'portrait'
+                    section_data['width'] = int(w_attr) / 1440 if w_attr else 0
+                    section_data['height'] = int(h_attr) / 1440 if h_attr else 0
+                    section_data['orient'] = orient
+                    section_data['is_landscape'] = (orient == 'landscape') or (
+                        section_data['width'] > section_data['height']
+                    )
+                    section_data['paper'] = (
+                        'A4' if abs(section_data['width'] - 8.27) < 0.2
+                              and abs(section_data['height'] - 11.69) < 0.2
+                        else 'A4-landscape' if abs(section_data['width'] - 11.69) < 0.2
+                              and abs(section_data['height'] - 8.27) < 0.2
+                        else f"{section_data['width']:.1f}x{section_data['height']:.1f}"
+                    )
+
                 pgMar = sect.find('w:pgMar', NSMAP)
                 if pgMar is not None:
-                    to_cm = lambda x: round(int(x) / 1440 * 2.54, 2)
-                    self.section_props['margin_top'] = to_cm(pgMar.get(f'{ns}top'))
-                    self.section_props['margin_bottom'] = to_cm(pgMar.get(f'{ns}bottom'))
-                    self.section_props['margin_left'] = to_cm(pgMar.get(f'{ns}left'))
-                    self.section_props['margin_right'] = to_cm(pgMar.get(f'{ns}right'))
-        except: pass
+                    section_data['margin_top'] = to_cm(pgMar.get(f'{ns}top'))
+                    section_data['margin_bottom'] = to_cm(pgMar.get(f'{ns}bottom'))
+                    section_data['margin_left'] = to_cm(pgMar.get(f'{ns}left'))
+                    section_data['margin_right'] = to_cm(pgMar.get(f'{ns}right'))
+
+                # Posición XML donde está esta sectPr (para mapear párrafos a sección)
+                section_data['xml_position'] = sect.sourceline if hasattr(sect, 'sourceline') else -1
+
+                sections.append(section_data)
+
+            self.section_props['sections'] = sections
+
+            # Retrocompatibilidad: exponer la PRIMERA sección como propiedades de
+            # nivel superior (motor y configuracion_pagina.py las usan así)
+            if sections:
+                first = sections[0]
+                self.section_props['paper'] = first.get('paper', 'unknown')
+                self.section_props['margin_top'] = first.get('margin_top', 0)
+                self.section_props['margin_bottom'] = first.get('margin_bottom', 0)
+                self.section_props['margin_left'] = first.get('margin_left', 0)
+                self.section_props['margin_right'] = first.get('margin_right', 0)
+                self.section_props['is_landscape'] = first.get('is_landscape', False)
+        except Exception:
+            pass
 
     def resolve(self, style_id, explicit_ppr, explicit_rpr=None):
         res_ppr = {**self.default_ppr}

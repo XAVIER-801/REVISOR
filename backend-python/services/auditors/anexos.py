@@ -17,25 +17,13 @@ from .base_auditor import BaseAuditor
 class AnexosAuditor(BaseAuditor):
 
     def audit(self):
-        self._audit_mandatory_documents()
+        # NOTA: La validación de Declaración Jurada y Autorización para Depósito
+        # se delega ahora a los auditores especializados:
+        #   - declaracion_autenticidad.py
+        #   - autorizacion_deposito.py
+        # Aquí solo validamos el formato general de la sección Anexos y la
+        # numeración secuencial.
         self._audit_formatting()
-
-    def _audit_mandatory_documents(self):
-        """Verifica la presencia de documentos obligatorios de la UNAP en Anexos."""
-        found_jurada = False
-        found_deposito = False
-
-        for p in self.paragraphs:
-            txt = p['text'].upper()
-            if "DECLARACION JURADA DE AUTENTICIDAD" in txt: found_jurada = True
-            if "AUTORIZACION PARA EL DEPOSITO" in txt: found_deposito = True
-
-        if not found_jurada:
-            self._add("Anexos", "Declaración Jurada", "error",
-                     "No se encontró la 'Declaración Jurada de Autenticidad de Tesis' en los anexos.", "Presente", "Ausente")
-        if not found_deposito:
-            self._add("Anexos", "Autorización de Depósito", "error",
-                     "No se encontró la 'Autorización para el Depósito de Tesis' en los anexos.", "Presente", "Ausente")
 
     def _audit_formatting(self):
         """Audita el formato de la sección de Anexos y sus títulos individuales."""
@@ -84,51 +72,110 @@ class AnexosAuditor(BaseAuditor):
             f_cm = round((f_ind or 0) / 567.0, 2)
             h_cm = round((h_ind or 0) / 567.0, 2)
 
-            annex_match = re.match(r"^Anexo\s+(\d+)(?:\.\s*|\s+\.\s*|\s+)(.*)", txt, re.IGNORECASE)
+            # Aceptar tanto numerados (Anexo 1.) como literales (Anexo N.)
+            # Guía UNAP pág. 27-28 usa "Anexo N." para Declaración Jurada y
+            # Autorización para Depósito (que van al final sin numerar).
+            annex_match = re.match(
+                r"^Anexo\s+(\d+|N)(?:\.\s*|\s+\.\s*|\s+)(.*)",
+                txt,
+                re.IGNORECASE,
+            )
 
             if annex_match:
                 num_str = annex_match.group(1)
-                num = int(num_str)
+                is_literal_N = num_str.upper() == "N"
+                num = 0 if is_literal_N else int(num_str)
                 title_txt = annex_match.group(2).strip()
-                found_annex_titles.append(num)
+                if not is_literal_N:
+                    found_annex_titles.append(num)
 
-                has_dot = bool(re.match(r"^Anexo\s+\d+\.", txt, re.IGNORECASE))
+                num_display = "N" if is_literal_N else str(num)
+
+                # ═══ Validación ESTRICTA de capitalización: "Anexo" (no ANEXO ni anexo) ═══
+                prefix_raw = re.match(r"^(\S+)\s+(\d+|N)", txt, re.IGNORECASE)
+                if prefix_raw:
+                    prefix_str = prefix_raw.group(1)
+                    if prefix_str != "Anexo":
+                        self._add(
+                            "Anexos",
+                            f"Capitalización Etiqueta: {prefix_str} {num_display}",
+                            "error",
+                            f"La etiqueta debe escribirse EXACTAMENTE como 'Anexo' "
+                            f"(primera letra A mayúscula, resto minúsculas). "
+                            f"Ejemplo correcto: 'Anexo {num_display}. Título del anexo'.",
+                            "Anexo (formato Tipo Título)",
+                            f"'{prefix_str}'",
+                            p_idx=i,
+                            p_text=txt[:40],
+                        )
+
+                # ═══ Validación del punto después del número/N ═══
+                has_dot = bool(re.match(r"^Anexo\s+(\d+|N)\.", txt, re.IGNORECASE))
                 if not has_dot:
-                    self._add("Anexos", f"Formato Anexo {num}", "error",
-                              f"La etiqueta 'Anexo {num}' debe estar seguida por un punto (.) y un espacio.",
-                              f"Anexo {num}.", txt[:25], p_idx=i, p_text=txt)
+                    self._add(
+                        "Anexos",
+                        f"Formato Anexo {num_display}",
+                        "error",
+                        f"La etiqueta 'Anexo {num_display}' en la sección de Anexos DEBE "
+                        f"estar seguida por un punto (.) y un espacio antes del título. "
+                        f"Formato correcto: 'Anexo {num_display}. Autorización para el depósito "
+                        f"de tesis en el Repositorio Institucional'. "
+                        f"Nota: en el ÍNDICE de Anexos NO va punto (formato distinto).",
+                        f"Anexo {num_display}.",
+                        txt[:25],
+                        p_idx=i,
+                        p_text=txt,
+                    )
 
-                expected_num = len(found_annex_titles)
-                if num != expected_num:
-                    self._add("Anexos", f"Secuencia Anexo {num}", "error",
-                              f"La numeración de los anexos debe ser secuencial (Anexo 1, Anexo 2...). Hallado: Anexo {num}.",
-                              f"Anexo {expected_num}", f"Anexo {num}", p_idx=i, p_text=txt)
+                # ═══ Secuencia (solo para anexos numerados) ═══
+                if not is_literal_N:
+                    expected_num = len(found_annex_titles)
+                    if num != expected_num:
+                        self._add(
+                            "Anexos",
+                            f"Secuencia Anexo {num}",
+                            "error",
+                            f"La numeración de los anexos debe ser secuencial "
+                            f"(Anexo 1, Anexo 2...). Hallado: Anexo {num}.",
+                            f"Anexo {expected_num}",
+                            f"Anexo {num}",
+                            p_idx=i,
+                            p_text=txt,
+                        )
 
-                # Validar negrita en etiqueta y normal en título
-                label_text = f"Anexo {num}."
-                label_ok = True
-                title_ok = True
-                prefix_matched = ""
-
-                for r in p['runs']:
-                    r_txt = r['text']
-                    if not r_txt.strip(): continue
-                    if len(prefix_matched) < len(label_text):
-                        prefix_matched += r_txt
-                        if not r.get('bold'):
-                            label_ok = False
-                    else:
-                        if r.get('bold'):
-                            title_ok = False
+                # ═══ NEGRITA: validación robusta usando _check_prefix_bold ═══
+                label_text = f"Anexo {num_display}."
+                label_ok = self._check_prefix_bold(p, len(label_text))
+                title_bold = self._check_suffix_bold(p, len(label_text))
 
                 if not label_ok:
-                    self._add("Anexos", f"Negrita Etiqueta Anexo {num}", "error",
-                              f"La etiqueta 'Anexo {num}.' debe estar en negrita.",
-                              "Negrita", "Normal", p_idx=i, p_text=txt)
-                if not title_ok:
-                    self._add("Anexos", f"Estilo Título Anexo {num}", "error",
-                              f"El título del anexo '{title_txt[:30]}...' debe estar sin negrita.",
-                              "Normal (Sin Negrita)", "Negrita", p_idx=i, p_text=txt)
+                    self._add(
+                        "Anexos",
+                        f"Negrita Etiqueta Anexo {num_display}",
+                        "error",
+                        f"La etiqueta '{label_text}' DEBE estar en NEGRITA. "
+                        f"Formato correcto: '{label_text}' en negrita + título del anexo "
+                        f"en estilo normal (sin negrita). Ejemplo: "
+                        f"'Anexo {num_display}. Autorización para el depósito de tesis en el "
+                        f"Repositorio Institucional'.",
+                        "Etiqueta en negrita",
+                        "Etiqueta sin negrita o parcialmente",
+                        p_idx=i,
+                        p_text=txt,
+                    )
+                if title_bold:
+                    self._add(
+                        "Anexos",
+                        f"Estilo Título Anexo {num_display}",
+                        "error",
+                        f"El título del anexo (\"{title_txt[:40]}...\") debe estar SIN negrita. "
+                        f"Solo la etiqueta 'Anexo {num_display}.' va en negrita; el título del "
+                        f"anexo va en estilo normal.",
+                        "Título en estilo Normal (sin negrita)",
+                        "Título en negrita",
+                        p_idx=i,
+                        p_text=txt,
+                    )
 
                 # Capitalización
                 if title_txt:
@@ -199,3 +246,35 @@ class AnexosAuditor(BaseAuditor):
             self._add("Anexos", "Títulos de Anexos Individuales", "error",
                       "No se identificaron títulos de anexos secuenciales (Anexo 1, Anexo 2...).",
                       "Anexo 1, Anexo 2...", "No encontrados")
+
+    # ── Helpers de formato de runs ──
+
+    def _check_prefix_bold(self, p, prefix_len):
+        """¿Los primeros prefix_len caracteres del párrafo están en negrita?"""
+        accumulated = 0
+        for r in p.get("runs", []):
+            r_txt = r.get("text", "") or ""
+            if not r_txt:
+                continue
+            for _ in r_txt:
+                if accumulated < prefix_len:
+                    if not r.get("bold"):
+                        return False
+                    accumulated += 1
+                else:
+                    return True
+        return accumulated >= prefix_len
+
+    def _check_suffix_bold(self, p, prefix_len):
+        """¿Hay caracteres alfanuméricos en negrita DESPUÉS del prefijo?"""
+        accumulated = 0
+        for r in p.get("runs", []):
+            r_txt = r.get("text", "") or ""
+            if not r_txt:
+                continue
+            for c in r_txt:
+                accumulated += 1
+                if accumulated > prefix_len + 2:  # +2 para tolerar espacios
+                    if r.get("bold") and c.isalnum():
+                        return True
+        return False

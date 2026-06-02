@@ -34,9 +34,18 @@ class ConclusionesRecomendacionesAuditor(BaseAuditor):
         for p in self.paragraphs:
             norm = p["norm"]
             if key_search in norm and not p.get("in_table", False):
-                # Asegurar que no sea una mención en índices
+                txt_raw = p["text"]
+                # Saltar entrada del Índice General (relleno de puntos o
+                # número de página al final, ej: "V. CONCLUSIONES    195")
+                if "...." in txt_raw or re.search(r"\s+\d+\s*$", txt_raw.strip()):
+                    continue
                 sec_upper = p.get("section", "").upper()
                 if "INDICE" in sec_upper or "ÍNDICE" in sec_upper:
+                    continue
+                # Saltar si está antes del fin del rango del índice general
+                if (hasattr(self.engine, 'last_index_idx')
+                        and self.engine.last_index_idx > 0
+                        and p["index"] <= self.engine.last_index_idx):
                     continue
                 found_section = True
                 p_idx = p["index"]
@@ -76,11 +85,37 @@ class ConclusionesRecomendacionesAuditor(BaseAuditor):
             # Identificar si es CASO 2 (Viñetas "-" o "•")
             is_bullet = p.get("is_bullet", False) or txt.startswith("-") or txt.startswith("•")
             
+            s_after = p.get("spacing_after", 0)
+            s_before = p.get("spacing_before", 0)
+
             if is_caso1:
                 # Validar CASO 1: Sangría izquierda 0cm, francesa 2.5cm
+                # Adicional: espaciado anterior 0/posterior 10, etiqueta PRIMERA: en negrita
                 ok_align = align in ["both", "justify"]
                 ok_indent = abs(l_cm) < 0.1 and abs(h_cm - 2.5) < 0.2
                 ok_spacing = line_spacing is not None and abs(line_spacing - 2.0) < 0.15
+
+                # Espaciado posterior 10pt
+                if abs(s_after - 10.0) > 1.5:
+                    self._add("Secciones Obligatorias",
+                              f"Espaciado Posterior {key_search} (Caso 1): {txt[:15]}...",
+                              "error",
+                              f"Las conclusiones/recomendaciones del Caso 1 deben tener espaciado "
+                              f"posterior de 10pt entre cada una.",
+                              "10pt", f"{s_after}pt", p_idx=p["index"], p_text=txt)
+
+                # PRIMERA:, SEGUNDA:, etc. deben tener etiqueta en negrita
+                m_label = re.match(r'^(PRIMER[AO]|SEGUND[AO]|TERCER[AO]|CUART[AO]|QUINT[AO]|'
+                                   r'SEXT[AO]|S[ÉE]PTIM[AO]|OCTAV[AO]|NOVEN[AO]|D[ÉE]CIM[AO]):',
+                                   txt.upper())
+                if m_label:
+                    label = m_label.group(0)
+                    if not self._check_prefix_bold(p, len(label)):
+                        self._add("Secciones Obligatorias",
+                                  f"Etiqueta en negrita {key_search}: {label}",
+                                  "warning",
+                                  f"La etiqueta '{label}' debería estar en negrita para destacarla.",
+                                  "Negrita", "Normal", p_idx=p["index"], p_text=txt)
 
                 passed = ok_align and ok_indent and ok_spacing
                 if passed:
@@ -109,6 +144,15 @@ class ConclusionesRecomendacionesAuditor(BaseAuditor):
                 ok_indent = abs(l_cm) < 0.1 and abs(h_cm - 0.75) < 0.2
                 ok_spacing = line_spacing is not None and abs(line_spacing - 2.0) < 0.15
 
+                # Espaciado posterior 10pt entre viñetas (igual que Caso 1)
+                if abs(s_after - 10.0) > 1.5:
+                    self._add("Secciones Obligatorias",
+                              f"Espaciado Posterior {key_search} (Caso 2): {txt[:15]}...",
+                              "warning",
+                              f"Las viñetas de conclusiones/recomendaciones (Caso 2) deben tener "
+                              f"espaciado posterior de 10pt.",
+                              "10pt", f"{s_after}pt", p_idx=p["index"], p_text=txt)
+
                 passed = ok_align and ok_indent and ok_spacing
                 if passed:
                     self._add("Secciones Obligatorias", f"Formato {key_search} (Caso 2): {txt[:15]}...", "passed",
@@ -134,3 +178,18 @@ class ConclusionesRecomendacionesAuditor(BaseAuditor):
                 self._add("Secciones Obligatorias", f"Estructura de entrada {key_search}: {txt[:15]}...", "warning",
                           f"Las conclusiones y recomendaciones deben redactarse bajo el Caso 1 (Ej: 'PRIMERA: ...') o el Caso 2 (Ej: '- ...'). Por favor, adapte el formato.",
                           "Caso 1 (PRIMERA:) o Caso 2 (Viñetas)", "Texto libre ordinario", p_idx=p["index"], p_text=txt)
+
+    def _check_prefix_bold(self, p, prefix_len):
+        accumulated = 0
+        for r in p.get("runs", []):
+            r_txt = r.get("text", "")
+            if not r_txt:
+                continue
+            for _ in r_txt:
+                if accumulated < prefix_len:
+                    if not r.get("bold"):
+                        return False
+                    accumulated += 1
+                else:
+                    return True
+        return accumulated >= prefix_len

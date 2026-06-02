@@ -24,10 +24,20 @@ class ReferenciasBibliograficasAuditor(BaseAuditor):
         # 1. Capturar párrafos de la sección de Referencias
         for p in self.paragraphs:
             norm = p["norm"]
+            txt_raw = p["text"]
             if "REFERENCIAS BIBLIOGRAFICAS" in norm or "REFERENCIAS BIBLIOGRÁFICAS" in norm:
-                # Asegurar que no sea una mención en índices
+                # Saltar entrada del Índice General (tiene relleno de puntos o
+                # número de página al final)
+                if "...." in txt_raw or re.search(r"\s+\d+\s*$", txt_raw.strip()):
+                    continue
+                # Saltar también si el contexto es un índice
                 sec_upper = p.get("section", "").upper()
                 if "INDICE" in sec_upper or "ÍNDICE" in sec_upper:
+                    continue
+                # Saltar si está antes del fin del rango del índice general
+                if (hasattr(self.engine, 'last_index_idx')
+                        and self.engine.last_index_idx > 0
+                        and p["index"] <= self.engine.last_index_idx):
                     continue
                 found_section = True
                 p_idx = p["index"]
@@ -100,31 +110,34 @@ class ReferenciasBibliograficasAuditor(BaseAuditor):
             l_cm = round((p.get("indent_left") or 0) / 567.0, 2)
             h_cm = round((p.get("indent_hanging") or 0) / 567.0, 2)
             line_spacing = p.get("line_spacing", 1.5)
+            s_before = p.get("spacing_before", 0) or 0
+            s_after = p.get("spacing_after", 0) or 0
 
             # Comprobar estilo APA o Vancouver
-            # Vancouver suele empezar con número "[1]" o "1."
             is_vancouver = bool(re.match(r'^(\[\d+\]|\d+\.?)\s+', txt))
 
             ok_size = size == 12 or size == 0
             ok_align = align in ["both", "justify"]
-            ok_spacing = line_spacing is not None and abs(line_spacing - 1.5) < 0.2
-            
+            ok_line_spacing = line_spacing is not None and abs(line_spacing - 1.5) < 0.2
+            # ═══ ESPACIADO: anterior 0pt, posterior 10pt ═══
+            ok_sb = s_before < 1.0
+            ok_sa = abs(s_after - 10.0) < 1.5
+
             # APA exige sangría francesa de 1.25cm, Vancouver suele ser alineada a la izquierda (francesa 0cm o similar)
             if is_vancouver:
-                # Para Vancouver, se permite sangría izquierda de 0cm
                 ok_indent = abs(l_cm) < 0.2
                 expected_indent_str = "Izq 0cm (Vancouver)"
             else:
-                # Para APA, exige sangría francesa de 1.25cm
                 ok_indent = abs(l_cm) < 0.1 and abs(h_cm - 1.25) < 0.2
                 expected_indent_str = "Izq 0cm, Francesa 1.25cm (APA)"
 
-            passed = ok_size and ok_align and ok_spacing and ok_indent
+            passed = ok_size and ok_align and ok_line_spacing and ok_indent and ok_sb and ok_sa
 
             if passed:
                 self._add("Referencias", f"Formato Entrada: {txt[:20]}...", "passed",
                           "La referencia bibliográfica cumple perfectamente con el formato exigido.",
-                          f"12pt, Justificado, Interlineado 1.5, {expected_indent_str}", "Cumple", p_idx=p["index"], p_text=txt)
+                          f"12pt, Justificado, Interlineado 1.5, Esp 0/10, {expected_indent_str}",
+                          "Cumple", p_idx=p["index"], p_text=txt)
             else:
                 req_list = []
                 act_list = []
@@ -134,13 +147,23 @@ class ReferenciasBibliograficasAuditor(BaseAuditor):
                 if not ok_align:
                     req_list.append("Justificada")
                     act_list.append(align)
-                if not ok_spacing:
+                if not ok_line_spacing:
                     req_list.append("Interlineado 1.5")
                     act_list.append(str(line_spacing))
+                if not ok_sb:
+                    req_list.append("Esp. anterior 0pt")
+                    act_list.append(f"{s_before}pt")
+                if not ok_sa:
+                    req_list.append("Esp. posterior 10pt")
+                    act_list.append(f"{s_after}pt")
                 if not ok_indent:
                     req_list.append(expected_indent_str)
                     act_list.append(f"Izq {l_cm}cm, Francesa {h_cm}cm")
 
                 self._add("Referencias", f"Formato Entrada: {txt[:20]}...", "error",
-                          f"Las entradas de Referencias Bibliográficas deben tener tamaño 12pt, alineación Justificada, interlineado de 1.5 y sangría francesa de 1.25cm (APA).",
-                          ", ".join(req_list), ", ".join(act_list), p_idx=p["index"], p_text=txt)
+                          f"Las entradas de Referencias Bibliográficas deben tener: tamaño 12pt, "
+                          f"alineación Justificada, interlineado 1.5, espaciado anterior 0pt y "
+                          f"posterior 10pt, sangría francesa de 1.25cm (APA) o izquierda 0cm "
+                          f"(Vancouver).",
+                          ", ".join(req_list), ", ".join(act_list),
+                          p_idx=p["index"], p_text=txt)

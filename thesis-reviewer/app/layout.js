@@ -34,10 +34,11 @@ export default function RootLayout({ children }) {
             
             {/* NAV LINKS - CENTERED */}
             <nav className="nav-links-wrap hidden md:flex">
+              <a href="/" className="nav-link">Inicio</a>
+              <a href="/guia" className="nav-link">Guía</a>
+              <a href="/dashboard" className="nav-link">Estadísticas</a>
               <a href="https://repositorio.unap.edu.pe/home" target="_blank" className="nav-link">Repositorio</a>
               <a href="https://vriunap.pe/" target="_blank" className="nav-link">VRI UNAP</a>
-              <a href="https://pgi.vriunap.pe/servicios" target="_blank" className="nav-link">Servicios PGI</a>
-              <a href="#" className="nav-link">Guía</a>
             </nav>
 
             {/* ACTION BUTTON - RIGHT */}

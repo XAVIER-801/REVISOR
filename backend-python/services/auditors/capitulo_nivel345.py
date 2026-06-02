@@ -48,6 +48,18 @@ class CapituloNivel345Auditor(BaseAuditor):
             if body_level < 3:
                 continue
 
+            # Saltar entradas del índice por si llegan aquí por mala detección
+            txt_raw = p['text']
+            sec_upper = p.get("section", "").upper()
+            style_id = p.get('style_id', '').upper()
+            is_toc_style = any(k in style_id for k in ['TOC', 'TDC', 'INDICE', 'ÍNDICE'])
+            has_index_content = "\t" in txt_raw or "..." in txt_raw or bool(re.search(r"\s+\d+$", txt_raw.strip()))
+            is_in_index_zone = self.last_index_idx != -1 and i <= self.last_index_idx
+            is_in_prelim_section = any(k in sec_upper for k in ['ÍNDICE', 'INDICE', 'TABLA DE CONTENIDOS', 'TABLA DE CONTENIDO'])
+
+            if is_toc_style or has_index_content or is_in_index_zone or is_in_prelim_section:
+                continue
+
             txt = p['text'].strip()
             if not txt:
                 continue
@@ -63,8 +75,19 @@ class CapituloNivel345Auditor(BaseAuditor):
             is_title = p.get('is_heading', False)
 
             # Detectar título por numeración
-            numbering_match = re.match(r'^(\d+(?:\.\d+)+)\.?(?:[\s\t]+|$)', txt.strip())
-            numbering_level = numbering_match.group(1).count('.') + 1 if numbering_match else None
+            # Regex amplia: captura numeración con o sin espacio tras ella
+            numbering_match = re.match(r'^(\d+(?:\.\d+)+)(\.?)(\s*)(.*)', txt.strip())
+            numbering_level = None
+            if numbering_match:
+                num_part = numbering_match.group(1)
+                trailing_dot = numbering_match.group(2)
+                space_sep = numbering_match.group(3)
+                title_text_part = numbering_match.group(4)
+                dot_count = num_part.count('.')
+                numbering_level = dot_count + 1
+                # Solo considerar si realmente tiene texto de título o es un número solo
+                if numbering_level < 2 or (not title_text_part.strip() and not space_sep):
+                    numbering_level = None
 
             # Un título es Nivel 3/4/5 si tiene numeración manual >= 3,
             # o si es un párrafo de título con body_level >= 3.
@@ -75,6 +98,21 @@ class CapituloNivel345Auditor(BaseAuditor):
 
             # ═══ TÍTULO NIVEL 3/4/5 ═══
             if is_title_at_level and eff_level == body_level:
+                # ── REGLA: Separación entre numeración y título ──
+                # La numeración debe estar separada del texto del título por al menos
+                # un espacio o tabulación. Ej: "2.3.1. Título" ✓, "2.3.1.Título" ✗
+                if numbering_match and numbering_level is not None and numbering_level >= 3:
+                    space_sep = numbering_match.group(3)
+                    title_text_part = numbering_match.group(4).strip()
+                    if title_text_part and not space_sep:
+                        num_str = numbering_match.group(1) + numbering_match.group(2)
+                        self._add("Jerarquía", f"Separación Numeración-Título {level_label}: {txt[:30]}...", "error",
+                                  f"La numeración '{num_str}' está pegada al texto del título '{title_text_part[:20]}...'. "
+                                  f"Debe haber al menos un espacio o tabulación entre la numeración y el título.",
+                                  f"{num_str} {title_text_part[:20]}...",
+                                  f"{num_str}{title_text_part[:20]}...",
+                                  p_idx=p['index'], p_text=txt)
+
                 # Negrita
                 if not bold:
                     self._add("Jerarquía", f"Estilo de Fuente Título {level_label}", "error",

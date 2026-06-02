@@ -42,7 +42,7 @@ class VinetasAuditor(BaseAuditor):
             if in_index_or_prelim or p.get('in_table') or (self.anexos_start_idx != -1 and i >= self.anexos_start_idx):
                 continue
 
-            bold = any(r.get('bold') for r in p.get('runs', []))
+            bold = self._is_meaningfully_bold(p)
             align = p.get('alignment', 'left')
             l_cm = round(p.get('indent_left') or 0, 2)
             h_cm = round(p.get('indent_hanging') or 0, 2)
@@ -79,18 +79,30 @@ class VinetasAuditor(BaseAuditor):
                           p_idx=p['index'], p_text=txt)
                 continue
 
+            # ═══ NIVEL CONTEXTUAL ═══
+            # Determinar el nivel del último título antes de esta viñeta usando
+            # tanto el rastreo local (current_level) como _find_context_level
+            # como respaldo. Las sangrías de viñetas dependen del nivel del título.
+            ctx_level = self._find_context_level(i) or current_level
+            # Tomar el más confiable: si current_level está bien rastreado, usarlo;
+            # si no, fallback a ctx_level
+            effective_level = current_level if current_level in (1, 2, 3, 4, 5) else ctx_level
+
             # Determinar si es sub-viñeta
             is_sub_bullet = False
             exp_l_cm = 0.5
-            if current_level in [1, 2]:
+            if effective_level in [1, 2]:
                 exp_l_cm = 0.5
                 if l_cm > 1.0: is_sub_bullet = True
-            elif current_level == 3:
+            elif effective_level == 3:
                 exp_l_cm = 1.75
                 if l_cm > 2.2: is_sub_bullet = True
-            elif current_level >= 4:
+            elif effective_level >= 4:
                 exp_l_cm = 3.0
                 if l_cm > 3.5: is_sub_bullet = True
+
+            # Para uso interno del resto de la función, current_level apunta al efectivo
+            current_level = effective_level
 
             # Determinar si es la última viñeta del bloque
             is_last_bullet = True
@@ -168,22 +180,33 @@ class VinetasAuditor(BaseAuditor):
                                   "Las viñetas bajo nivel 4 o 5 deben tener Sangría Izquierda 3.0cm y Francesa 0.75cm.",
                                   "Izq 3.0cm, Fran 0.75cm", f"{l_part}, {h_part}", p_idx=p['index'], p_text=txt)
 
-            # 4. Symbol consistency
+            # 4. Symbol consistency (Guía UNAP pág. 20)
+            # "Las viñetas con un único tipo de símbolo"
+            # "Las sub-viñetas con un único tipo de símbolo"
+            # → ERROR (no warning) porque es regla explícita de la guía
             bullet_char = detected_symbol
             if is_sub_bullet:
                 if current_sub_bullet_symbol is None:
                     current_sub_bullet_symbol = bullet_char
                 elif bullet_char != current_sub_bullet_symbol:
-                    self._add("Viñetas", "Consistencia Símbolo Sub-Viñeta", "warning",
-                              "Las sub-viñetas deben usar un único tipo de símbolo en toda la lista.",
-                              current_sub_bullet_symbol, bullet_char, p_idx=p['index'], p_text=txt)
+                    self._add("Viñetas", "Consistencia Símbolo Sub-Viñeta", "error",
+                              f"Las sub-viñetas deben usar UN ÚNICO tipo de símbolo en toda la lista "
+                              f"(Guía UNAP pág. 20). Se detectó cambio de '{current_sub_bullet_symbol}' a "
+                              f"'{bullet_char}'.",
+                              f"Único símbolo: '{current_sub_bullet_symbol}'",
+                              f"Símbolo mezclado: '{bullet_char}'",
+                              p_idx=p['index'], p_text=txt)
             else:
                 if current_bullet_symbol is None:
                     current_bullet_symbol = bullet_char
                 elif bullet_char != current_bullet_symbol:
-                    self._add("Viñetas", "Consistencia Símbolo Viñeta", "warning",
-                              "Las viñetas deben usar un único tipo de símbolo en toda la lista.",
-                              current_bullet_symbol, bullet_char, p_idx=p['index'], p_text=txt)
+                    self._add("Viñetas", "Consistencia Símbolo Viñeta", "error",
+                              f"Las viñetas deben usar UN ÚNICO tipo de símbolo en toda la lista "
+                              f"(Guía UNAP pág. 20). Se detectó cambio de '{current_bullet_symbol}' a "
+                              f"'{bullet_char}'.",
+                              f"Único símbolo: '{current_bullet_symbol}'",
+                              f"Símbolo mezclado: '{bullet_char}'",
+                              p_idx=p['index'], p_text=txt)
 
     def _check_is_bullet(self, p, txt):
         """
@@ -253,11 +276,20 @@ class VinetasAuditor(BaseAuditor):
             if txt_strip:
                 first_char = txt_strip[0]
                 h_cm = round((p.get('indent_hanging') or 0) / 567.0, 2)
+                l_cm = round((p.get('indent_left') or 0) / 567.0, 2)
+                next_char_is_separator = len(txt_strip) > 1 and txt_strip[1] in (' ', '\t')
+                looks_like_bullet_paragraph = (h_cm > 0.3 or l_cm > 0.3 or next_char_is_separator)
 
                 # PRIMERO: Verificar si comienza con símbolo PROHIBIDO
                 if first_char in prohibited_symbols or ('\ue000' <= first_char <= '\uf8ff'):
-                    # NO es viñeta válida, es símbolo prohibido
-                    is_bullet = False
+                    # CAMBIO CRÍTICO: si el párrafo PARECE viñeta (sangría
+                    # francesa, izquierda, o separador después del símbolo),
+                    # lo marcamos como viñeta CON símbolo prohibido (para que
+                    # se reporte el error). Antes retornaba is_bullet=False
+                    # y nunca se reportaba.
+                    if not looks_like_bullet_paragraph:
+                        return False, True, ''
+                    is_bullet = True
                     is_symbol_ok = False
                     detected_symbol = first_char
                     if first_char in ['➢', '➔', '➤', '→', '⇒', '\uf0d8']:

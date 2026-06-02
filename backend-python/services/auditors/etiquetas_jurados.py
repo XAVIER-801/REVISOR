@@ -17,9 +17,18 @@ from .base_auditor import BaseAuditor
 
 class EtiquetasJuradosAuditor(BaseAuditor):
 
+    # Cargos esperados en la Hoja de Jurados (Guía pág. 7)
+    EXPECTED_CARGOS = [
+        ("PRESIDENTE", "PRESIDENTE:"),
+        ("PRIMER MIEMBRO", "PRIMER MIEMBRO:"),
+        ("SEGUNDO MIEMBRO", "SEGUNDO MIEMBRO:"),
+        ("ASESOR DE TESIS", "ASESOR DE TESIS:"),
+    ]
+
     def audit(self):
         found_any = False
-        
+        found_cargos = set()
+
         # Primero buscar etiquetas de texto
         for i, p in enumerate(self.paragraphs):
             txt = p['text'].strip()
@@ -42,6 +51,28 @@ class EtiquetasJuradosAuditor(BaseAuditor):
             elif re.match(r'^TEMA\s*:', txt, re.IGNORECASE):
                 self._audit_area_tema(p, txt, 'TEMA')
                 found_any = True
+
+            # ═══ CARGOS DEL JURADO (Guía pág. 7) ═══
+            for cargo_key, cargo_label in self.EXPECTED_CARGOS:
+                if cargo_key in norm and ':' in txt:
+                    self._audit_cargo_jurado(p, txt, cargo_label)
+                    found_cargos.add(cargo_key)
+                    found_any = True
+                    break
+
+        # Verificar que se hayan encontrado los 4 cargos obligatorios
+        if found_cargos:
+            missing = [c[1] for c in self.EXPECTED_CARGOS if c[0] not in found_cargos]
+            if missing:
+                self._add(
+                    "Hoja de Jurados",
+                    "Cargos faltantes",
+                    "warning",
+                    f"No se detectaron todos los cargos obligatorios en la Hoja de Jurados. "
+                    f"Faltan: {', '.join(missing)}.",
+                    "PRESIDENTE, PRIMER MIEMBRO, SEGUNDO MIEMBRO, ASESOR DE TESIS",
+                    f"Faltan: {', '.join(missing)}",
+                )
 
         # Si no se encontró ninguna etiqueta en texto, buscar si hay una imagen escaneada preliminar
         if not found_any:
@@ -209,3 +240,99 @@ class EtiquetasJuradosAuditor(BaseAuditor):
                   f"La etiqueta '{etiqueta}:' debe estar en MAYÚSCULAS, Negrita, alineada a la IZQUIERDA, con espaciado anterior y posterior de 0pt, y sin sangría de ningún tipo.",
                   expected_str, actual_str,
                   p_idx=p['index'], p_text=txt)
+
+    def _audit_cargo_jurado(self, p, txt, cargo_label):
+        """
+        Valida formato de cargos del jurado (Guía UNAP pág. 7):
+        - Etiqueta en MAYÚSCULAS, negrita
+        - Sangría izquierda 6cm
+        - Espaciado posterior 30pt (separa de siguiente cargo)
+        - Tamaño 12pt
+        - Verificar que en la línea siguiente esté el nombre del jurado a 11pt
+        """
+        align = p.get('alignment', 'left')
+        is_bold = any(r.get('bold') for r in p.get('runs', []) if r.get('text', '').strip())
+        l_cm = round((p.get('indent_left') or 0) / 567.0, 2) if (p.get('indent_left') or 0) > 10 else round(p.get('indent_left') or 0, 2)
+        s_before = p.get('spacing_before', 0) or 0
+        s_after = p.get('spacing_after', 0) or 0
+        size, _, _, _ = self._get_p_props(p)
+        line_spacing = p.get('line_spacing')
+
+        # Tamaño 12pt
+        if size and abs(size - 12) > 0.5:
+            self._add(
+                "Hoja de Jurados",
+                f"Tamaño Cargo \"{cargo_label}\"",
+                "error",
+                f"El cargo '{cargo_label}' debe ser de 12pt según la Guía UNAP.",
+                "12pt",
+                f"{size}pt",
+                p_idx=p['index'],
+                p_text=txt,
+            )
+
+        # Sangría izquierda 6cm
+        if abs(l_cm - 6.0) > 0.5:
+            self._add(
+                "Hoja de Jurados",
+                f"Sangría Cargo \"{cargo_label}\"",
+                "error",
+                f"El cargo '{cargo_label}' debe tener sangría izquierda de 6cm según la Guía UNAP.",
+                "Izq 6cm",
+                f"Izq {l_cm}cm",
+                p_idx=p['index'],
+                p_text=txt,
+            )
+
+        # Negrita
+        if not is_bold:
+            self._add(
+                "Hoja de Jurados",
+                f"Negrita Cargo \"{cargo_label}\"",
+                "warning",
+                f"El cargo '{cargo_label}' debería estar sin negrita según la Guía UNAP.",
+                "Sin negrita",
+                "Negrita",
+                p_idx=p['index'],
+                p_text=txt,
+            )
+
+        # Espaciado posterior 30pt
+        if abs(s_after - 30.0) > 5.0:
+            self._add(
+                "Hoja de Jurados",
+                f"Espaciado Posterior Cargo \"{cargo_label}\"",
+                "warning",
+                f"El cargo '{cargo_label}' debería tener espaciado posterior de 30pt para "
+                f"separar del siguiente cargo (Guía UNAP).",
+                "30pt",
+                f"{s_after}pt",
+                p_idx=p['index'],
+                p_text=txt,
+            )
+
+        # Buscar el siguiente párrafo no vacío (debería ser el nombre del jurado a 11pt)
+        idx = p['index']
+        for j in range(idx + 1, min(idx + 5, len(self.paragraphs))):
+            next_p = self.paragraphs[j]
+            next_txt = next_p['text'].strip()
+            if not next_txt:
+                continue
+            # Saltar separadores como "_____________"
+            if re.match(r'^[_\s—–\-]+$', next_txt):
+                continue
+            # Verificar tamaño del nombre del jurado
+            next_size, _, _, _ = self._get_p_props(next_p)
+            if next_size and abs(next_size - 11) > 0.5:
+                self._add(
+                    "Hoja de Jurados",
+                    f"Tamaño Nombre Jurado ({cargo_label})",
+                    "warning",
+                    f"El nombre del jurado correspondiente a '{cargo_label}' debe ser de 11pt "
+                    f"(excepción a la regla general de 12pt, según Guía UNAP pág. 7).",
+                    "11pt",
+                    f"{next_size}pt",
+                    p_idx=next_p['index'],
+                    p_text=next_txt,
+                )
+            break

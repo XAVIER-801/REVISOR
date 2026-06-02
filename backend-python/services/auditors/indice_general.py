@@ -158,7 +158,11 @@ class IndiceGeneralAuditor(BaseAuditor):
             if not is_tdc and not in_table and not looks_like_index and i > idx_start + 3:
                 continue
 
-            # Validar que los preliminares no tengan número ni relleno
+            # ═══ DISTINCIÓN CRÍTICA (Guía pág. 10-11) ═══
+            # Preliminares (DEDICATORIA, AGRADECIMIENTOS, ÍNDICES, ACRÓNIMOS):
+            #   → SIN relleno de puntos NI número de página visible
+            # Desde RESUMEN en adelante:
+            #   → CON relleno de puntos Y número de página
             preliminares_sin_numero = [
                 'DEDICATORIA', 'AGRADECIMIENTO', 'AGRADECIMIENTOS',
                 'ÍNDICE GENERAL', 'INDICE GENERAL',
@@ -166,13 +170,28 @@ class IndiceGeneralAuditor(BaseAuditor):
                 'ÍNDICE DE TABLAS', 'INDICE DE TABLAS',
                 'ÍNDICE DE ACRÓNIMOS', 'INDICE DE ACRONIMOS',
                 'ÍNDICE DE ANEXOS', 'INDICE DE ANEXOS',
-                'ACRÓNIMOS', 'ACRONIMOS'
+                'ACRÓNIMOS', 'ACRONIMOS',
+                'RESUMEN', 'ABSTRACT'
             ]
-            if any(upper.strip() == p for p in preliminares_sin_numero):
+            # Secciones con relleno obligatorio (RESUMEN en adelante)
+            con_relleno_obligatorio = []
+            is_preliminar = any(upper.strip() == ps for ps in preliminares_sin_numero)
+            requiere_relleno = any(upper.strip() == cr for cr in con_relleno_obligatorio)
+
+            if is_preliminar:
                 if has_dots_or_page:
                     self._add("Índice General", f"Preliminar con numeración: {txt[:20]}...", "error",
-                              f"La sección '{txt[:25]}...' en el índice NO DEBE tener relleno de puntos ni número de página visible.",
+                              f"La sección preliminar '{txt[:25]}...' en el índice NO DEBE tener relleno de puntos ni número de página visible (Guía UNAP pág. 10-11).",
                               "Sin relleno ni número", "Con relleno o número visible", p_idx=p['index'], p_text=txt)
+                else:
+                    self._add("Índice General", f"Preliminar sin numeración: {txt[:20]}...", "passed",
+                              f"La sección preliminar '{txt[:25]}...' está correctamente sin relleno ni número.",
+                              "Sin relleno ni número", "Sin relleno ni número", p_idx=p['index'], p_text=txt)
+            elif requiere_relleno:
+                if not has_dots_or_page:
+                    self._add("Índice General", f"Sección sin numeración: {txt[:20]}...", "error",
+                              f"La sección '{txt[:25]}...' en el índice DEBE tener relleno de puntos y número de página (desde RESUMEN en adelante según Guía UNAP).",
+                              "Con relleno y número de página", "Sin relleno ni número", p_idx=p['index'], p_text=txt)
 
             # Tamaño 12pt
             if size != 12 and size != 0:
@@ -360,7 +379,71 @@ class IndiceGeneralAuditor(BaseAuditor):
                               f"El título de nivel 3 y 4 en el índice no debe estar en Negrita. El título de Nivel 4/5 '{txt[:20]}...' en el índice debe estar JUSTIFICADO o ALINEADO A LA IZQUIERDA, sin negrita (NORMAL) y en MINÚSCULAS.",
                               expected_str, actual_str, p_idx=p['index'], p_text=txt)
             else:
-                # NIVEL 1 (RESUMEN, ANEXOS, etc.)
+                # ═══ DETECTAR LÍNEAS HUÉRFANAS EN EL ÍNDICE ═══
+                # Si la línea NO es una sección reconocida de Nivel 1 (RESUMEN,
+                # ABSTRACT, INTRODUCCIÓN, CONCLUSIONES, RECOMENDACIONES, REFERENCIAS,
+                # ANEXOS, ACRÓNIMOS, DEDICATORIA, AGRADECIMIENTOS) y tampoco tiene
+                # numeración decimal (1.1., 1.1.1.), entonces es una línea "al aire"
+                # que necesita numeración o no debería estar en el índice.
+                upper_clean = upper.strip()
+                # Quitar números de página al final y rellenos
+                upper_clean = re.sub(r'\s*\.\.+\s*\d+\s*$', '', upper_clean)
+                upper_clean = re.sub(r'\s+\d+\s*$', '', upper_clean)
+                upper_clean = upper_clean.strip()
+
+                known_level1_sections = {
+                    "RESUMEN", "ABSTRACT", "INTRODUCCION", "INTRODUCCIÓN",
+                    "CONCLUSIONES", "RECOMENDACIONES",
+                    "REFERENCIAS BIBLIOGRAFICAS", "REFERENCIAS BIBLIOGRÁFICAS",
+                    "ANEXOS", "ACRONIMOS", "ACRÓNIMOS",
+                    "DEDICATORIA", "AGRADECIMIENTOS", "AGRADECIMIENTO",
+                    "INDICE GENERAL", "ÍNDICE GENERAL",
+                    "INDICE DE TABLAS", "ÍNDICE DE TABLAS",
+                    "INDICE DE FIGURAS", "ÍNDICE DE FIGURAS",
+                    "INDICE DE ANEXOS", "ÍNDICE DE ANEXOS",
+                    "INDICE DE ACRONIMOS", "ÍNDICE DE ACRÓNIMOS",
+                    "INDICE DE CUADROS", "ÍNDICE DE CUADROS",
+                    "INDICE DE ILUSTRACIONES", "ÍNDICE DE ILUSTRACIONES",
+                    "DECLARACION JURADA", "DECLARACIÓN JURADA",
+                    "AUTORIZACION PARA EL DEPOSITO", "AUTORIZACIÓN PARA EL DEPÓSITO",
+                    "HOJA DE JURADOS", "REPORTE DE SIMILITUD",
+                }
+                is_known_section = upper_clean in known_level1_sections or any(
+                    upper_clean.startswith(k) for k in known_level1_sections
+                )
+
+                # Numeración decimal: acepta tanto "1.1. texto" como "1.1.texto"
+                # (sin espacio) y romanos para capítulos V/VI/VII.
+                has_numbering = bool(
+                    re.match(r"^\d+(?:\.\d+)*\.?(\s+|[A-Za-zÁÉÍÓÚÑáéíóúñ])", txt) or
+                    re.match(r"^[IVXLC]+\.\s*[A-ZÁÉÍÓÚÑ]", txt) or
+                    re.match(r"^CAP[ÍI]TULO\s+[IVXLC0-9]+", upper_clean)
+                )
+
+                if not is_known_section and not has_numbering:
+                    # ─── LÍNEA HUÉRFANA: falta numeración o no debería estar aquí ───
+                    self._add(
+                        "Índice General",
+                        f"Falta numeración: {txt[:25]}...",
+                        "error",
+                        f"La línea '{txt[:50]}...' aparece en el índice sin numeración "
+                        f"y no es una sección reconocida (RESUMEN, INTRODUCCIÓN, "
+                        f"CONCLUSIONES, etc.). Las líneas del índice deben tener "
+                        f"numeración del nivel correspondiente (ej: '2.1.', '2.1.1.') "
+                        f"o ser una sección obligatoria. POSIBLES CAUSAS: (1) un "
+                        f"subtítulo del documento sin asignarle nivel/numeración; "
+                        f"(2) un párrafo regular incluido por error en el índice; "
+                        f"(3) un título manual sin estilo. SOLUCIÓN: asígnele "
+                        f"numeración decimal del nivel correcto (2.1., 2.1.1., etc.) "
+                        f"o elimínelo del índice.",
+                        "Numeración decimal (ej: '2.1.') o sección reconocida",
+                        f"Línea sin numeración ni etiqueta: '{txt[:30]}...'",
+                        p_idx=p['index'],
+                        p_text=txt,
+                    )
+                    continue
+
+                # ═══ NIVEL 1 LEGÍTIMO (RESUMEN, ANEXOS, etc.) ═══
                 ok_align = align in ['both', 'justify', 'left']
                 ok_bold = is_bold
                 ok_case = is_uppercase
@@ -477,23 +560,70 @@ class IndiceGeneralAuditor(BaseAuditor):
                       expected_desc, actual_desc, p_idx=p['index'], p_text=txt)
 
     def _find_index_range(self):
+        """
+        Encuentra el rango del Índice General (idx_start, idx_end).
+
+        El fin del rango se detecta cuando:
+          - Aparece un título de OTRA sección con estilo Heading (alta confianza), o
+          - Aparece un título grande (>=14pt) centrado SIN relleno de puntos ni
+            número de página → es título de página de la SIGUIENTE sección
+            (DEDICATORIA, ÍNDICE DE TABLAS, RESUMEN, etc.), no entrada del índice.
+
+        Esto evita que el motor exija 12pt a títulos de página de 16pt.
+        """
         idx_start = -1
         idx_end = -1
+        section_keywords = [
+            'ÍNDICE DE TABLAS', 'INDICE DE TABLAS',
+            'ÍNDICE DE FIGURAS', 'INDICE DE FIGURAS',
+            'ÍNDICE DE ANEXOS', 'INDICE DE ANEXOS',
+            'ÍNDICE DE CUADROS', 'INDICE DE CUADROS',
+            'RESUMEN', 'ABSTRACT',
+            'ACRÓNIMOS', 'ACRONIMOS',
+            'DEDICATORIA', 'AGRADECIMIENTO', 'AGRADECIMIENTOS',
+            'INTRODUCCION', 'INTRODUCCIÓN',
+            'CAPITULO', 'CAPÍTULO',
+        ]
         for i, p in enumerate(self.paragraphs):
-            txt_upper = p['text'].strip().upper()
+            txt = p['text'].strip()
+            txt_upper = txt.upper()
             if idx_start == -1:
                 if 'ÍNDICE GENERAL' in txt_upper or 'INDICE GENERAL' in txt_upper:
-                    idx_start = i
+                    # No confundir con la entrada del propio índice
+                    if not ('....' in txt or re.search(r'\s+\d+\s*$', txt)):
+                        idx_start = i
             else:
+                if not txt_upper or len(txt_upper) <= 3:
+                    continue
                 style = p.get('style_id', '')
                 is_tdc = style.upper().startswith('TDC') if style else False
-                if not is_tdc and txt_upper and len(txt_upper) > 3:
-                    if any(k in txt_upper for k in ['ÍNDICE DE TABLAS', 'INDICE DE TABLAS',
-                           'ÍNDICE DE FIGURAS', 'INDICE DE FIGURAS', 'RESUMEN', 'ABSTRACT',
-                           'ACRÓNIMOS', 'ACRONIMOS', 'DEDICATORIA', 'AGRADECIMIENTO']):
-                        if style and ('Ttulo' in style or 'Heading' in style or 'titulo' in style.lower()):
-                            idx_end = i
-                            break
+                if is_tdc:
+                    continue
+
+                has_section_keyword = any(k in txt_upper for k in section_keywords)
+                if has_section_keyword:
+                    # 1) Estilo Heading explícito → fin de rango
+                    is_heading_style = (
+                        style and (
+                            'Heading' in style or 'titulo' in style.lower()
+                            or 'ttulo' in style.lower()
+                        )
+                    )
+                    # 2) Título de página: centrado + sin relleno + sin número final
+                    align = p.get('alignment', 'left')
+                    size, bold, _, _ = self._get_p_props(p)
+                    size = size or 0
+                    has_filler = '....' in txt
+                    has_page_num = bool(re.search(r'\s+\d+\s*$', txt))
+                    looks_like_page_title = (
+                        align == 'center'
+                        and size >= 14
+                        and not has_filler
+                        and not has_page_num
+                    )
+                    if is_heading_style or looks_like_page_title:
+                        idx_end = i
+                        break
 
         if idx_start == -1:
             return -1, -1

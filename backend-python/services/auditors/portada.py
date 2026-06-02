@@ -176,7 +176,10 @@ class PortadaAuditor(BaseAuditor):
                       "No se encontró el logo oficial de la Universidad en la portada.",
                       "Ancho: 4.33cm, Alto: 4.68cm", "No encontrado")
 
-        # 4. Validar que la fuente de la portada sea estrictamente Times New Roman
+        # 4. NUEVO: Validar tamaños específicos por línea (Guía UNAP pág. 4)
+        self._audit_specific_sizes(cover_paragraphs)
+
+        # 5. Validar que la fuente de la portada sea estrictamente Times New Roman
         cover_font_errors = []
         for idx_p, p in enumerate(cover_paragraphs):
             txt = p["text"].strip()
@@ -194,3 +197,83 @@ class PortadaAuditor(BaseAuditor):
             self._add("Portada", "Fuente Times New Roman", "passed",
                       "Todos los textos de la portada están correctamente en la fuente Times New Roman.",
                       "Times New Roman", "Times New Roman", p_idx=cover_paragraphs[0]["index"])
+
+    def _audit_specific_sizes(self, cover_paragraphs):
+        """
+        Valida tamaños de fuente específicos por línea según la Guía UNAP pág. 4:
+        - UNIVERSIDAD NACIONAL DEL ALTIPLANO: 18pt
+        - FACULTAD DE...: 16pt
+        - ESCUELA PROFESIONAL DE...: 16pt
+        - Título de la tesis: 16pt (con espaciado anterior 25pt, posterior 20pt)
+        - TESIS: 14pt
+        - PRESENTADA POR / autor / PARA OPTAR / LICENCIADO / PUNO-PERÚ / año: 14pt
+        """
+        for p in cover_paragraphs:
+            txt = p["text"].strip()
+            if not txt:
+                continue
+            norm = p["norm"]
+            size, bold, italic, font = self._get_p_props(p)
+            s_before = p.get("spacing_before", 0)
+            s_after = p.get("spacing_after", 0)
+
+            # 18pt esperado
+            if "UNIVERSIDAD NACIONAL DEL ALTIPLANO" in norm:
+                if size and abs(size - 18) > 0.5:
+                    self._add("Portada", "Tamaño UNIVERSIDAD NACIONAL DEL ALTIPLANO", "error",
+                              "La línea 'UNIVERSIDAD NACIONAL DEL ALTIPLANO' debe ser 18pt según la Guía UNAP.",
+                              "18pt", f"{size}pt", p_idx=p["index"], p_text=txt)
+
+            # 16pt esperado para FACULTAD y ESCUELA PROFESIONAL
+            elif norm.startswith("FACULTAD DE") or "FACULTAD DE " in norm:
+                if size and abs(size - 16) > 0.5:
+                    self._add("Portada", "Tamaño FACULTAD DE...", "error",
+                              "La línea 'FACULTAD DE...' debe ser 16pt según la Guía UNAP.",
+                              "16pt", f"{size}pt", p_idx=p["index"], p_text=txt)
+
+            elif "ESCUELA PROFESIONAL" in norm:
+                if size and abs(size - 14) > 0.5:
+                    self._add("Portada", "Tamaño ESCUELA PROFESIONAL...", "error",
+                              "La línea 'ESCUELA PROFESIONAL DE...' debe ser 14pt según la Guía UNAP.",
+                              "14pt", f"{size}pt", p_idx=p["index"], p_text=txt)
+
+            # 14pt esperado para TESIS, PRESENTADA POR, etc.
+            elif norm == "TESIS":
+                if size and abs(size - 14) > 0.5:
+                    self._add("Portada", "Tamaño TESIS", "error",
+                              "La palabra 'TESIS' debe ser 14pt según la Guía UNAP.",
+                              "14pt", f"{size}pt", p_idx=p["index"], p_text=txt)
+                if abs(s_after - 15.0) > 2.0:
+                    self._add("Portada", "Espaciado Posterior TESIS", "warning",
+                              "La palabra 'TESIS' debe tener espaciado posterior de 15pt.",
+                              "15pt", f"{s_after}pt", p_idx=p["index"], p_text=txt)
+
+            elif "PRESENTAD" in norm and "POR" in norm:
+                if size and abs(size - 14) > 0.5:
+                    self._add("Portada", "Tamaño PRESENTADA POR", "error",
+                              "La línea 'PRESENTADA POR:' debe ser 14pt según la Guía UNAP.",
+                              "14pt", f"{size}pt", p_idx=p["index"], p_text=txt)
+
+            elif "PARA OPTAR" in norm:
+                if size and abs(size - 14) > 0.5:
+                    self._add("Portada", "Tamaño PARA OPTAR", "error",
+                              "La línea 'PARA OPTAR EL TÍTULO PROFESIONAL DE:' debe ser 14pt según la Guía UNAP.",
+                              "14pt", f"{size}pt", p_idx=p["index"], p_text=txt)
+                if abs(s_after - 10.0) > 2.0:
+                    self._add("Portada", "Espaciado Posterior PARA OPTAR", "warning",
+                              "La línea 'PARA OPTAR EL TÍTULO PROFESIONAL DE:' debe tener espaciado posterior de 10pt.",
+                              "10pt", f"{s_after}pt", p_idx=p["index"], p_text=txt)
+
+            # PUNO - PERÚ o año (4 dígitos)
+            elif norm in ("PUNO - PERU", "PUNO  PERU") or norm.replace("-", "").replace(" ", "") == "PUNOPERU":
+                if size and abs(size - 14) > 0.5:
+                    self._add("Portada", "Tamaño PUNO - PERÚ", "error",
+                              "La línea 'PUNO - PERÚ' debe ser 14pt según la Guía UNAP.",
+                              "14pt", f"{size}pt", p_idx=p["index"], p_text=txt)
+
+            # Año (4 dígitos sueltos)
+            elif re.fullmatch(r'\d{4}', txt):
+                if size and abs(size - 14) > 0.5:
+                    self._add("Portada", "Tamaño Año de Sustentación", "error",
+                              "El año de sustentación debe ser 14pt según la Guía UNAP.",
+                              "14pt", f"{size}pt", p_idx=p["index"], p_text=txt)

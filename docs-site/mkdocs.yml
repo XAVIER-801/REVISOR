@@ -1,0 +1,74 @@
+site_name: REVISOR — Documentación de Reglas
+site_description: Reglas oficiales de auditoría de tesis UNAP según Guía de Presentación 2.0
+site_author: Vicerrectorado de Investigación UNAP
+
+theme:
+  name: material
+  language: es
+  palette:
+    - scheme: default
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/weather-night
+        name: Cambiar a tema oscuro
+    - scheme: slate
+      primary: teal
+      accent: cyan
+      toggle:
+        icon: material/weather-sunny
+        name: Cambiar a tema claro
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+
+nav:
+  - Inicio: index.md
+  - Empezar:
+      - Cómo usar el sistema: empezar/uso.md
+      - Configuración rápida: empezar/setup.md
+  - Reglas de Auditoría:
+      - Configuración general: reglas/config-general.md
+      - Portada: reglas/portada.md
+      - Hoja de Jurados: reglas/jurados.md
+      - Índices: reglas/indices.md
+      - Capítulos y títulos: reglas/capitulos.md
+      - Tablas y figuras: reglas/tablas-figuras.md
+      - Viñetas: reglas/vinetas.md
+      - Resumen y Abstract: reglas/resumen-abstract.md
+      - Anexos obligatorios: reglas/anexos.md
+      - Referencias bibliográficas: reglas/referencias.md
+      - Estilo de escritura: reglas/estilo.md
+  - Errores frecuentes: errores-frecuentes.md
+  - FAQ: faq.md
+  - Para desarrolladores:
+      - Arquitectura: dev/arquitectura.md
+      - API REST: dev/api.md
+      - Cómo agregar un auditor: dev/agregar-auditor.md
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/unap/revisor
+    - icon: fontawesome/solid/globe
+      link: https://vriunap.pe

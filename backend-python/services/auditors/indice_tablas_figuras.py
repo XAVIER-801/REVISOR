@@ -14,6 +14,13 @@ from .base_auditor import BaseAuditor
 class IndiceTablasFigurasAuditor(BaseAuditor):
 
     def audit(self):
+        # ═══ VALIDAR TÍTULOS DE PÁGINA (16pt) ═══
+        # "ÍNDICE DE TABLAS", "ÍNDICE DE FIGURAS", "ÍNDICE DE ANEXOS" cuando son
+        # el ENCABEZADO de su propia página deben ser 16pt, centrados, negrita.
+        # (Cuando son ENTRADA dentro del Índice General, son 12pt — eso lo valida
+        # indice_general.py.)
+        self._audit_page_titles()
+
         table_idx_start = -1
         figure_idx_start = -1
         annex_idx_start = -1
@@ -54,26 +61,39 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
 
                 label = f"{prefix} {num}"
 
-                # Regla 0: Capitalización
+                # Regla 0: Capitalización ESTRICTA (Tabla, Figura, Anexo - no MAYÚSCULAS)
                 ok_case = raw_prefix == prefix
                 if not ok_case:
-                    self._add("Índice de Tablas/Figuras", f"Capitalización Etiqueta: {raw_prefix} {num}", "error",
-                              f"La etiqueta '{raw_prefix} {num}' debe estar escrita en formato Tipo Título (por ejemplo: '{prefix} {num}').",
-                              f"'{prefix} {num}'", f"'{raw_prefix} {num}'", p_idx=p['index'], p_text=txt)
-                else:
-                    self._add("Índice de Tablas/Figuras", f"Capitalización Etiqueta: {label}", "passed",
-                              f"La capitalización de la etiqueta '{label}' es correcta (Tipo Título).",
-                              f"'{prefix} {num}'", f"'{raw_prefix} {num}'", p_idx=p['index'], p_text=txt)
+                    self._add(
+                        "Índice de Tablas/Figuras",
+                        f"Capitalización Etiqueta: {raw_prefix} {num}",
+                        "error",
+                        f"La etiqueta '{raw_prefix} {num}' DEBE escribirse EXACTAMENTE como "
+                        f"'{prefix} {num}' (primera letra mayúscula, resto minúsculas), "
+                        f"según la Guía UNAP pág. 12-14. No use mayúsculas completas ni "
+                        f"minúsculas iniciales.",
+                        f"'{prefix} {num}'",
+                        f"'{raw_prefix} {num}'",
+                        p_idx=p['index'],
+                        p_text=txt,
+                    )
 
-                # Regla 1: No punto después del número
+                # Regla 1: NO punto después del número en el índice
+                # (en la SECCIÓN de anexos sí va con punto, pero en el ÍNDICE no)
                 if has_dot:
-                    self._add("Índice de Tablas/Figuras", f"Punto en Etiqueta: {label}", "error",
-                              f"La etiqueta '{prefix} {num}.' en el índice tiene un punto final innecesario. Según la norma, debe ser '{prefix} {num}' (sin punto).",
-                              f"Sin punto final (ej: '{prefix} {num}')", f"Con punto final (ej: '{prefix} {num}.')", p_idx=p['index'], p_text=txt)
-                else:
-                    self._add("Índice de Tablas/Figuras", f"Punto en Etiqueta: {label}", "passed",
-                              f"La etiqueta '{prefix} {num}' en el índice está correctamente escrita sin punto final.",
-                              f"Sin punto final (ej: '{prefix} {num}')", f"Sin punto final (ej: '{prefix} {num}')", p_idx=p['index'], p_text=txt)
+                    self._add(
+                        "Índice de Tablas/Figuras",
+                        f"Punto en Etiqueta: {label}",
+                        "error",
+                        f"La etiqueta '{prefix} {num}.' en el ÍNDICE tiene un punto final "
+                        f"innecesario. En el índice debe ser '{prefix} {num}' SIN punto, "
+                        f"separado del título por una tabulación. (En la sección de Anexos "
+                        f"sí lleva punto, pero aquí en el índice no.)",
+                        f"'{prefix} {num}' (sin punto, con tab)",
+                        f"'{prefix} {num}.' (con punto)",
+                        p_idx=p['index'],
+                        p_text=txt,
+                    )
 
                 # Regla 2: Tabulación
                 has_tab_separator = rest.startswith('\t') or '\t' in rest[:4]
@@ -86,6 +106,88 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
                               f"La descripción de la '{prefix} {num}' en el índice está correctamente tabulada y separada de la etiqueta.",
                               "Tabulado", "Tabulado", p_idx=p['index'], p_text=txt)
 
+                # Regla 3: Sangría francesa específica por tipo de índice (Guía UNAP pág. 12-14)
+                # Tablas: 2.0 cm | Figuras: 2.15 cm | Anexos: 2.25 cm
+                h_ind = p.get('indent_hanging') or 0
+                h_cm = round(h_ind / 567.0, 2) if h_ind > 10 else round(h_ind, 2)
+                # Algunos motores guardan en cm ya; intentar interpretar correcto
+                if h_cm > 10:  # Si > 10, asumimos twips → convertir
+                    h_cm = round(h_ind / 567.0, 2)
+
+                expected_hang = None
+                if is_in_tables_index:
+                    expected_hang = 2.0
+                elif is_in_figures_index:
+                    expected_hang = 2.15
+                elif is_in_annexes_index:
+                    expected_hang = 2.25
+
+                if expected_hang is not None and abs(h_cm - expected_hang) > 0.15:
+                    self._add("Índice de Tablas/Figuras", f"Sangría Francesa: {prefix} {num}", "error",
+                              f"La entrada '{prefix} {num}' debe tener sangría francesa de {expected_hang}cm "
+                              f"(específica para el tipo de índice según Guía UNAP).",
+                              f"Francesa {expected_hang}cm", f"Francesa {h_cm}cm",
+                              p_idx=p['index'], p_text=txt)
+
+                # Regla 4: Alineación justificada (Guía pág. 12-14)
+                align = p.get('alignment', 'left')
+                if align not in ('both', 'justify'):
+                    self._add("Índice de Tablas/Figuras", f"Alineación: {prefix} {num}", "warning",
+                              f"Las entradas del índice deben estar justificadas.",
+                              "Justificada", align, p_idx=p['index'], p_text=txt)
+
+                # ═══ Regla 5: ESTILO DIFERENCIADO DE LA ENTRADA ═══
+                # La etiqueta ("Tabla N" / "Figura N" / "Anexo N") debe ir en NEGRITA.
+                # La descripción posterior (después del tab) debe ir SIN negrita.
+                # Esto se evalúa por separado para no marcar falsos positivos.
+                label_text = f"{prefix} {num}"
+                label_is_bold = self._check_prefix_bold(p, len(label_text))
+                desc_is_bold = self._check_description_bold(p, len(label_text))
+                desc_is_italic = self._check_description_italic(p, len(label_text))
+
+                if not label_is_bold:
+                    self._add(
+                        "Índice de Tablas/Figuras",
+                        f"Etiqueta sin negrita: {prefix} {num}",
+                        "error",
+                        f"La etiqueta '{prefix} {num}' en el índice DEBE estar en NEGRITA. "
+                        f"Solo la descripción que sigue (después del tab) va sin negrita.",
+                        f"'{prefix} {num}' en negrita",
+                        "Sin negrita",
+                        p_idx=p['index'], p_text=txt,
+                    )
+
+                if desc_is_bold:
+                    self._add(
+                        "Índice de Tablas/Figuras",
+                        f"Descripción en negrita: {prefix} {num}",
+                        "error",
+                        f"La descripción que sigue a '{prefix} {num}' debe estar SIN negrita. "
+                        f"Solo la etiqueta '{prefix} {num}' lleva negrita.",
+                        "Descripción sin negrita",
+                        "Descripción en negrita",
+                        p_idx=p['index'], p_text=txt,
+                    )
+
+                if desc_is_italic:
+                    self._add(
+                        "Índice de Tablas/Figuras",
+                        f"Descripción en cursiva: {prefix} {num}",
+                        "warning",
+                        f"La descripción de '{prefix} {num}' no debe ir en cursiva. "
+                        f"Excepción: nombres científicos sí pueden ir en cursiva.",
+                        "Sin cursiva (excepto nombres científicos)",
+                        "Cursiva",
+                        p_idx=p['index'], p_text=txt,
+                    )
+
+                # Regla 6: Tamaño 12pt
+                size = p['runs'][0].get('size', 0) if p.get('runs') else 0
+                if size > 0 and abs(size - 12) > 0.5:
+                    self._add("Índice de Tablas/Figuras", f"Tamaño: {prefix} {num}", "error",
+                              f"Las entradas del índice deben ser de 12pt.",
+                              "12pt", f"{size}pt", p_idx=p['index'], p_text=txt)
+
         # Reportar presencia de hipervínculos
         self._report_hyperlinks(table_idx_start, "Tablas", "ÍNDICE DE TABLAS")
         self._report_hyperlinks(figure_idx_start, "Figuras", "ÍNDICE DE FIGURAS")
@@ -95,6 +197,210 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
         self._audit_index_spacing("ÍNDICE DE TABLAS", "Tablas")
         self._audit_index_spacing("ÍNDICE DE FIGURAS", "Figuras")
         self._audit_index_spacing("ÍNDICE DE ANEXOS", "Anexos")
+
+    def _audit_page_titles(self):
+        """
+        Audita los TÍTULOS DE PÁGINA "ÍNDICE DE TABLAS", "ÍNDICE DE FIGURAS",
+        "ÍNDICE DE ANEXOS" — los que aparecen como encabezado de su propia
+        página (no como entrada del Índice General).
+
+        Heurística para distinguir:
+          - Es título de página si: centrado + tamaño grande (>=14pt) + sin
+            relleno de puntos ni número de página al final.
+          - Es entrada del índice general si: tiene relleno '....' o termina
+            con un número de página, o si su tamaño es <= 12pt.
+        """
+        TARGETS = {
+            "ÍNDICE DE TABLAS", "INDICE DE TABLAS",
+            "ÍNDICE DE FIGURAS", "INDICE DE FIGURAS",
+            "ÍNDICE DE ANEXOS", "INDICE DE ANEXOS",
+            "ÍNDICE DE CUADROS", "INDICE DE CUADROS",
+            "ÍNDICE DE ILUSTRACIONES", "INDICE DE ILUSTRACIONES",
+        }
+        for p in self.paragraphs:
+            txt = p['text'].strip()
+            if not txt:
+                continue
+            upper = txt.upper()
+            # Limpiar relleno de puntos y número de página
+            upper_clean = re.sub(r'\s*\.\.+\s*\d+\s*$', '', upper)
+            upper_clean = re.sub(r'\s+\d+\s*$', '', upper_clean).strip()
+
+            if upper_clean not in TARGETS:
+                continue
+
+            # ¿Es entrada del índice (relleno o número de página)?
+            has_filler = '....' in txt
+            has_page_num = bool(re.search(r'\s+\d+\s*$', txt))
+            is_index_entry = has_filler or has_page_num
+            if is_index_entry:
+                continue  # Ya se valida en indice_general.py como entrada (12pt)
+
+            # Heurística adicional: si está dentro del rango del Índice General
+            # y NO tiene estilo Heading, considerarlo entrada
+            in_index_general_range = False
+            if (hasattr(self.engine, 'last_index_idx')
+                    and self.engine.last_index_idx > 0
+                    and p['index'] <= self.engine.last_index_idx):
+                style_id = (p.get('style_id') or '').lower()
+                is_heading_style = 'heading' in style_id or 'titulo' in style_id or 'ttulo' in style_id
+                if not is_heading_style:
+                    in_index_general_range = True
+            if in_index_general_range:
+                continue
+
+            # ── ES TÍTULO DE PÁGINA: validar 16pt, centrado, negrita ──
+            size, bold, _, _ = self._get_p_props(p)
+            size = size or 0
+            align = p.get('alignment', 'left')
+            s_after = p.get('spacing_after', 0)
+            line_spacing = p.get('line_spacing')
+
+            problems = []
+            if size and abs(size - 16) > 0.5:
+                problems.append(("tamaño", f"{size}pt", "16pt"))
+            if align != 'center':
+                problems.append(("alineación", align, "centrado"))
+            if not bold:
+                problems.append(("estilo", "Normal", "Negrita"))
+            if line_spacing and abs(line_spacing - 2.0) > 0.2:
+                problems.append(("interlineado", str(line_spacing), "2.0"))
+            if abs(s_after - 10.0) > 1.5:
+                problems.append(("esp. posterior", f"{s_after}pt", "10pt"))
+
+            section_label = upper_clean
+            if problems:
+                req = ", ".join(f"{name}: {exp}" for name, _, exp in problems)
+                act = ", ".join(f"{name}: {act}" for name, act, _ in problems)
+                self._add(
+                    "Índice de Tablas/Figuras",
+                    f"Título de página: {section_label}",
+                    "error",
+                    f"El título de página '{section_label}' debe ser 16pt, centrado, "
+                    f"negrita, interlineado 2.0, espaciado posterior 10pt según la "
+                    f"Guía UNAP pág. 12-14. NOTA: cuando este mismo texto aparece "
+                    f"como ENTRADA en el ÍNDICE GENERAL es 12pt — son contextos "
+                    f"distintos.",
+                    req,
+                    act,
+                    p_idx=p['index'],
+                    p_text=txt,
+                )
+            else:
+                self._add(
+                    "Índice de Tablas/Figuras",
+                    f"Título de página: {section_label}",
+                    "passed",
+                    f"El título de página '{section_label}' cumple con el formato "
+                    f"16pt centrado negrita.",
+                    "16pt, Centrado, Negrita",
+                    "Cumple",
+                    p_idx=p['index'],
+                    p_text=txt,
+                )
+
+    def _check_prefix_bold(self, p, prefix_len):
+        """Verifica si los primeros `prefix_len` caracteres están en negrita."""
+        accumulated = 0
+        for r in p.get("runs", []):
+            r_txt = r.get("text", "")
+            if not r_txt:
+                continue
+            for _ in r_txt:
+                if accumulated < prefix_len:
+                    if not r.get("bold"):
+                        return False
+                    accumulated += 1
+                else:
+                    return True
+        return accumulated >= prefix_len
+
+    def _check_description_bold(self, p, prefix_len):
+        """Verifica si la parte DESPUÉS del prefijo (descripción) está en negrita."""
+        accumulated = 0
+        for r in p.get("runs", []):
+            r_txt = r.get("text", "")
+            if not r_txt:
+                continue
+            for _ in r_txt:
+                accumulated += 1
+                if accumulated > prefix_len + 3:  # +3 para saltar tab/espacios
+                    # Verificar runs posteriores
+                    if r.get("bold") and r_txt.strip() and not r_txt.strip().isdigit():
+                        return True
+                    break
+        return False
+
+    def _check_description_italic(self, p, prefix_len):
+        """
+        Verifica si la descripción (post-prefix) tiene cursiva problemática.
+
+        Tolerancias:
+        - Hasta 3 palabras en cursiva → aceptado (nombres científicos, términos
+          extranjeros como 'in vitro', etc.)
+        - TODA la descripción en cursiva → aceptado (título descriptivo APA,
+          que va en cursiva por norma)
+        - Cursiva parcial con > 3 palabras → flagged como warning
+
+        Retorna True si se debe reportar como problema.
+        """
+        # Recopilar caracteres de la descripción con su estado de cursiva
+        chars_with_italic = []
+        accumulated = 0
+        for r in p.get("runs", []):
+            r_txt = r.get("text", "")
+            if not r_txt:
+                continue
+            is_italic = bool(r.get("italic"))
+            for c in r_txt:
+                accumulated += 1
+                if accumulated > prefix_len + 3:  # +3 para saltar tab/espacios
+                    chars_with_italic.append((c, is_italic))
+
+        if not chars_with_italic:
+            return False
+
+        # Construir palabras y rastrear si cada una está en cursiva
+        words = []
+        current_word = ""
+        italic_chars_in_word = 0
+        total_chars_in_word = 0
+
+        for c, is_italic in chars_with_italic:
+            if c.isalnum() or c in "áéíóúñÁÉÍÓÚÑüÜ":
+                current_word += c
+                total_chars_in_word += 1
+                if is_italic:
+                    italic_chars_in_word += 1
+            else:
+                if current_word and total_chars_in_word > 0:
+                    word_is_italic = (italic_chars_in_word / total_chars_in_word) >= 0.5
+                    words.append((current_word, word_is_italic))
+                current_word = ""
+                italic_chars_in_word = 0
+                total_chars_in_word = 0
+
+        # Última palabra pendiente
+        if current_word and total_chars_in_word > 0:
+            word_is_italic = (italic_chars_in_word / total_chars_in_word) >= 0.5
+            words.append((current_word, word_is_italic))
+
+        if not words:
+            return False
+
+        italic_word_count = sum(1 for _, is_it in words if is_it)
+        total_word_count = len(words)
+
+        # Si TODA la descripción está en cursiva → título descriptivo APA, aceptable
+        if italic_word_count == total_word_count:
+            return False
+
+        # Si ≤ 3 palabras en cursiva → probablemente nombres científicos, aceptable
+        if italic_word_count <= 3:
+            return False
+
+        # Cursiva parcial con > 3 palabras → flagged
+        return True
 
     def _find_index_range(self, section_name):
         idx_start = -1

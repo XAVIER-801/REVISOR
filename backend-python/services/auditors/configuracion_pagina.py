@@ -20,10 +20,11 @@ class ConfiguracionPaginaAuditor(BaseAuditor):
         # Márgenes y papel
         sp = self.resolver.section_props
         paper = sp.get('paper', 'Unknown')
-        ok_paper = paper == 'A4'
+        ok_paper = paper in ('A4', 'A4-landscape')
         self._add("Configuración de Página", "Tamaño de Papel", "passed" if ok_paper else "error",
                   "El papel debe ser A4.", "A4", paper)
 
+        # Validar márgenes de la sección principal (portrait)
         margins = [
             ('Superior', sp.get('margin_top'), 2.5),
             ('Inferior', sp.get('margin_bottom'), 2.5),
@@ -34,6 +35,63 @@ class ConfiguracionPaginaAuditor(BaseAuditor):
             ok = abs((actual or 0) - expected) < 0.1
             self._add("Configuración de Página", f"Margen {name}", "passed" if ok else "error",
                       f"Margen {name} debe ser {expected} cm.", f"{expected} cm", f"{actual} cm")
+
+        # ═══ VALIDACIÓN DE SECCIONES HORIZONTALES (LANDSCAPE) ═══
+        # En orientación landscape, los márgenes deben mantenerse físicamente
+        # equivalentes a portrait:
+        #   - El margen "izquierdo" del XML aparece visualmente ARRIBA → debe ser 3.5cm
+        #   - El margen "superior" del XML aparece visualmente a la DERECHA → 2.5cm
+        #   - El margen "derecho" del XML aparece visualmente ABAJO → 2.5cm
+        #   - El margen "inferior" del XML aparece visualmente a la IZQUIERDA → 2.5cm
+        # Es decir, el margen izquierdo (3.5cm) se conserva físicamente en el lado
+        # de encuadernación, que en landscape es la parte SUPERIOR.
+        sections = sp.get('sections', [])
+        landscape_sections = [s for s in sections if s.get('is_landscape')]
+        if landscape_sections:
+            for idx, ls_sect in enumerate(landscape_sections):
+                # En landscape, el margen XML que aparece visualmente arriba sigue
+                # siendo el "left" del XML (3.5cm esperado para encuadernación).
+                ls_left = ls_sect.get('margin_left', 0)
+                ls_top = ls_sect.get('margin_top', 0)
+                ls_right = ls_sect.get('margin_right', 0)
+                ls_bottom = ls_sect.get('margin_bottom', 0)
+
+                ok_left = abs(ls_left - 3.5) < 0.1
+                ok_top = abs(ls_top - 2.5) < 0.1
+                ok_right = abs(ls_right - 2.5) < 0.1
+                ok_bottom = abs(ls_bottom - 2.5) < 0.1
+
+                section_label = f"Sección horizontal #{idx + 1}"
+                if ok_left and ok_top and ok_right and ok_bottom:
+                    self._add(
+                        "Configuración de Página",
+                        f"Márgenes {section_label}",
+                        "passed",
+                        f"La {section_label} en orientación horizontal mantiene los márgenes "
+                        f"correctos: 3.5cm en el lado de encuadernación (visualmente arriba).",
+                        "Izq XML 3.5cm (arriba visualmente), resto 2.5cm",
+                        "Cumple",
+                    )
+                else:
+                    detalles = []
+                    if not ok_left:
+                        detalles.append(f"Izq XML {ls_left}cm (debería 3.5cm)")
+                    if not ok_top:
+                        detalles.append(f"Sup XML {ls_top}cm (debería 2.5cm)")
+                    if not ok_right:
+                        detalles.append(f"Der XML {ls_right}cm (debería 2.5cm)")
+                    if not ok_bottom:
+                        detalles.append(f"Inf XML {ls_bottom}cm (debería 2.5cm)")
+                    self._add(
+                        "Configuración de Página",
+                        f"Márgenes {section_label}",
+                        "error",
+                        f"La {section_label} en orientación horizontal debe mantener "
+                        f"3.5cm en el lado de encuadernación (que aparece visualmente arriba "
+                        f"cuando la página rota a horizontal) y 2.5cm en los otros tres lados.",
+                        "Izq XML 3.5cm, resto 2.5cm",
+                        ", ".join(detalles),
+                    )
 
         # Muestreo de formato global
         sample = [p for p in self.paragraphs if len(p['text']) > 150 and not p.get('in_table') and not p.get('is_cover')][:30]
@@ -67,6 +125,25 @@ class ConfiguracionPaginaAuditor(BaseAuditor):
 
         # Verificar numeración de líneas (borradores)
         has_lines = getattr(self.engine, 'has_line_numbering', False)
-        self._add("Configuración de Página", "Numeración de Líneas", "passed" if not has_lines else "error",
-                  "El documento de tesis final y limpio no debe contener numeración de líneas de página (solo se permite en borradores).",
-                  "Sin numeración de líneas", "El documento contiene numeración de líneas activa en sus secciones" if has_lines else "Sin numeración de líneas")
+        if has_lines:
+            self._add(
+                "Configuración de Página",
+                "Numeración de Líneas Activa",
+                "warning",
+                "El documento tiene NUMERACIÓN DE LÍNEAS ACTIVA. Esos números secuenciales "
+                "(1, 2, 3...) que aparecen al margen izquierdo de cada página solo se permiten "
+                "en BORRADORES de revisión, NUNCA en la versión final de la tesis.\n\n"
+                "SOLUCIÓN: Pestaña 'Diseño' (o 'Disposición') → 'Números de línea' → "
+                "Seleccionar 'Ninguno'. Si tiene varias secciones, repita para cada sección.",
+                "Sin numeración de líneas en versión final",
+                "Numeración de líneas activa en alguna sección",
+            )
+        else:
+            self._add(
+                "Configuración de Página",
+                "Numeración de Líneas",
+                "passed",
+                "El documento no tiene numeración de líneas activa (correcto).",
+                "Sin numeración de líneas",
+                "Sin numeración de líneas",
+            )

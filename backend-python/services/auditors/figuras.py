@@ -15,6 +15,110 @@ class FigurasAuditor(BaseAuditor):
 
     def audit(self):
         self._audit_figure_labels_and_titles()
+        self._audit_figure_image_alignment()
+
+    def _audit_figure_image_alignment(self):
+        """
+        Valida que el párrafo que contiene la imagen (drawing) de una figura o tabla
+        esté alineado a la IZQUIERDA, no centrado. Su sangría debe coincidir con la
+        del nivel del título contextual en que se encuentra.
+        """
+        for i, p in enumerate(self.paragraphs):
+            drawings = p.get('drawings', [])
+            has_drawing = len(drawings) > 0
+            if not has_drawing:
+                continue
+
+            # Saltar imágenes en páginas preliminares (jurados, turnitin)
+            sec_upper = p.get('section', '').upper()
+            if any(k in sec_upper for k in ['JURADOS', 'SIMILITUD', 'DEDICATORIA']):
+                continue
+
+            # Buscar la etiqueta "Figura N" o "Tabla N" más cercana hacia arriba para contexto (máximo 10 párrafos atrás)
+            label_text = ""
+            is_table = False
+            for k in range(i - 1, max(-1, i - 10), -1):
+                prev_txt = self.paragraphs[k]['text'].strip()
+                prev_upper = prev_txt.upper()
+                if re.match(r'^FIGURA\s+\d+', prev_upper):
+                    label_text = prev_txt[:30]
+                    is_table = False
+                    break
+                elif re.match(r'^TABLA\s+\d+', prev_upper):
+                    label_text = prev_txt[:30]
+                    is_table = True
+                    break
+
+            # Si no hay etiqueta de Figura o Tabla cercana, no la auditamos bajo esta regla
+            if not label_text:
+                continue
+                
+            # Si tiene etiqueta, la auditamos (incluso si p.get('in_table') es True,
+            # ya que a veces los tesistas usan tablas invisibles para colocar imágenes lado a lado).
+
+            category = "Tablas" if is_table else "Figuras"
+            element_type = "tabla" if is_table else "figura"
+            ref = f" ({label_text})"
+
+            # Verificar si es de "mayor tamaño" (ancho > 13cm)
+            is_large = any(d.get('width', 0) >= 13.0 for d in drawings)
+
+            # 1. Validar Alineación
+            align = p.get('alignment', 'left')
+            
+            if is_large:
+                # Figuras grandes pueden estar centradas
+                if align not in ('left', 'both', 'justify', 'center'):
+                    self._add(
+                        category,
+                        f"Alineación de Imagen: {label_text}",
+                        "error",
+                        f"La imagen de la {element_type}{ref} de mayor tamaño debe estar centrada o alineada a la IZQUIERDA.",
+                        "Alineación: Izquierda/Centrado",
+                        f"Alineación: {align.capitalize()}",
+                        p_idx=p['index'],
+                        p_text=f"[Imagen de {element_type}]",
+                    )
+                else:
+                    self._add(category, f"Alineación de Imagen: {label_text}", "passed", "Alineación correcta", "Izquierda/Centrado", align, p_idx=p['index'])
+            else:
+                if align not in ('left', 'both', 'justify'):
+                    self._add(
+                        category,
+                        f"Alineación de Imagen: {label_text}",
+                        "error",
+                        f"La imagen de la {element_type}{ref} debe estar alineada a la IZQUIERDA, no centrada. "
+                        f"La sangría es la que la posiciona horizontalmente según el nivel del título contextual al que pertenece.",
+                        "Alineación: Izquierda",
+                        f"Alineación: {align.capitalize()}",
+                        p_idx=p['index'],
+                        p_text=f"[Imagen de {element_type}]",
+                    )
+                else:
+                    self._add(category, f"Alineación de Imagen: {label_text}", "passed", "Alineación correcta", "Izquierda", align, p_idx=p['index'])
+
+            # 2. Validar Sangría (debe coincidir con su nivel de título contextual)
+            context_level = self._find_context_level(i)
+            exp_l_cm = self._get_expected_indent_for_level(context_level)
+            
+            l_val = p.get('indent_left') or 0
+            l_cm = round(l_val / 567.0, 2) if l_val > 10 else round(l_val, 2)
+            
+            if align in ('left', 'both', 'justify'):
+                if abs(l_cm - exp_l_cm) > 0.1:
+                    self._add(
+                        category,
+                        f"Sangría de Imagen: {label_text}",
+                        "warning",
+                        f"La sangría izquierda de la imagen de la {element_type}{ref} debe coincidir con la del título de Nivel {context_level} ({exp_l_cm}cm). "
+                        f"Hallado: {l_cm}cm.",
+                        f"Izq {exp_l_cm}cm",
+                        f"Izq {l_cm}cm",
+                        p_idx=p['index'],
+                        p_text=f"[Imagen de {element_type}]",
+                    )
+                else:
+                    self._add(category, f"Sangría de Imagen: {label_text}", "passed", "Sangría correcta", f"{exp_l_cm}cm", f"{l_cm}cm", p_idx=p['index'])
 
     def _get_expected_indent_for_level(self, level):
         """Retorna sangría esperada para un nivel."""
@@ -24,6 +128,22 @@ class FigurasAuditor(BaseAuditor):
             return 1.25
         else:  # 4, 5
             return 2.5
+
+    def _check_prefix_italic(self, p, prefix_len):
+        """Verifica si los primeros `prefix_len` caracteres del párrafo están en cursiva."""
+        accumulated = 0
+        for r in p.get("runs", []):
+            r_txt = r.get("text", "")
+            if not r_txt:
+                continue
+            for _ in r_txt:
+                if accumulated < prefix_len:
+                    if not r.get("italic"):
+                        return False
+                    accumulated += 1
+                else:
+                    return True
+        return accumulated >= prefix_len
 
     def _audit_figure_labels_and_titles(self):
         """Audita etiquetas, títulos y notas/fuentes de figuras."""
@@ -54,11 +174,12 @@ class FigurasAuditor(BaseAuditor):
                 title_in_same_para = label_match.group(2).strip() if label_match else ""
 
                 # NUEVO: Validar tamaño de fuente (DEBE ser 12pt)
+                # NOTA: style_resolver ya retorna size en puntos enteros
                 font_size = 0
                 if p.get('runs'):
-                    font_size = p['runs'][0].get('size', 0) // 2 if p['runs'][0].get('size') else 0
+                    font_size = p['runs'][0].get('size', 0)
 
-                if font_size > 0 and font_size != 12:
+                if font_size > 0 and abs(font_size - 12) > 0.5:
                     self._add("Figuras", f"Tamaño Etiqueta: {label_text}", "error",
                              f"La etiqueta de Figura debe estar en 12 puntos. Hallado: {font_size}pt.",
                              "12pt", f"{font_size}pt", p_idx=p['index'], p_text=txt)
@@ -92,8 +213,8 @@ class FigurasAuditor(BaseAuditor):
                              f"La etiqueta de Figura debe tener la misma sangría que el título de Nivel {context_level} ({exp_l_cm}cm).",
                              f"Izq {exp_l_cm}cm", f"Izq {l_cm}cm", p_idx=p['index'], p_text=txt)
 
-                # 2. Estilo (Negrita)
-                is_bold = any(r.get('bold') for r in p.get('runs', []))
+                # 2. Estilo (Negrita) — usa detección por mayoría de caracteres
+                is_bold = self._is_meaningfully_bold(p)
                 if not is_bold:
                     self._add("Figuras", f"Estilo Etiqueta: {label_text}", "error",
                              "Las etiquetas de Figura deben estar en Negrita.", "Negrita", "Normal", p_idx=p['index'], p_text=txt)
@@ -125,62 +246,91 @@ class FigurasAuditor(BaseAuditor):
                                      "El título descriptivo de la Figura debe estar en CURSIVA y SIN NEGRITA.",
                                      ", ".join(req_list), ", ".join(act_list), p_idx=p['index'], p_text=txt)
                 else:
-                    if i + 1 < len(self.paragraphs):
-                        next_p = self.paragraphs[i+1]
-                        is_italic = any(r.get('italic') for r in next_p.get('runs', []))
-                        is_next_bold = any(r.get('bold') for r in next_p.get('runs', []))
-                        n_align = next_p.get('alignment', 'left')
-                        n_l_cm = round((next_p.get('indent_left') or 0) / 567.0, 2)
+                    # Buscar el próximo párrafo no vacío después de la etiqueta
+                    next_idx = -1
+                    for j in range(i + 1, len(self.paragraphs)):
+                        pj = self.paragraphs[j]
+                        if pj['text'].strip() or pj.get('drawings'):
+                            next_idx = j
+                            break
 
-                        if (not is_italic) or is_next_bold:
-                            req_list = []
-                            act_list = []
-                            if not is_italic:
-                                req_list.append("Cursiva")
-                                act_list.append("Normal")
-                            if is_next_bold:
-                                req_list.append("Sin Negrita")
-                                act_list.append("Negrita")
-                            self._add("Figuras", f"Estilo Título: {next_p['text'][:20]}...", "error",
-                                     "El título descriptivo de la Figura debe estar en CURSIVA y SIN NEGRITA.",
-                                     ", ".join(req_list), ", ".join(act_list), p_idx=next_p['index'], p_text=next_p['text'])
+                    if next_idx == -1:
+                        self._add("Figuras", f"Secuencia: Título de {label_text}", "error",
+                                 f"Falta el título descriptivo de la figura '{label_text}'. El título debe estar FUERA de la figura, arriba de ella, y en CURSIVA.",
+                                 "Título (Cursiva) fuera de la figura", "No se encontró título antes de la figura", p_idx=p['index'], p_text=txt)
+                    else:
+                        next_p = self.paragraphs[next_idx]
+                        next_upper = next_p['text'].strip().upper()
 
-                        # NUEVO: Validar tamaño de fuente del título (12pt)
-                        n_font_size = 0
-                        if next_p.get('runs'):
-                            n_font_size = next_p['runs'][0].get('size', 0) // 2 if next_p['runs'][0].get('size') else 0
-                        if n_font_size > 0 and n_font_size != 12:
-                            self._add("Figuras", f"Tamaño Título: {next_p['text'][:20]}...", "error",
-                                     f"El título de Figura debe estar en 12 puntos. Hallado: {n_font_size}pt.",
-                                     "12pt", f"{n_font_size}pt", p_idx=next_p['index'], p_text=next_p['text'])
+                        has_drawing = False
+                        drawings = next_p.get("drawings") or []
+                        for d in drawings:
+                            if d.get("width", 0) >= 3.0:
+                                has_drawing = True
+                                break
 
-                        # NUEVO: Validar espaciado del título (anterior 0pt, posterior 0pt)
-                        n_s_before = next_p.get('spacing_before', 0)
-                        n_s_after = next_p.get('spacing_after', 0)
-                        if n_s_before > 1.0:
-                            self._add("Figuras", f"Espaciado Anterior Título: {next_p['text'][:20]}...", "error",
-                                     "El título de Figura debe tener espaciado anterior de 0pt.",
-                                     "0pt", f"{n_s_before}pt", p_idx=next_p['index'], p_text=next_p['text'])
-                        if n_s_after > 1.0:
-                            self._add("Figuras", f"Espaciado Posterior Título: {next_p['text'][:20]}...", "error",
-                                     "El título de Figura debe tener espaciado posterior de 0pt.",
-                                     "0pt", f"{n_s_after}pt", p_idx=next_p['index'], p_text=next_p['text'])
+                        if has_drawing or next_upper.startswith("NOTA") or next_upper.startswith("FUENTE") or next_p.get('in_table'):
+                            self._add("Figuras", f"Secuencia: Título de {label_text}", "error",
+                                     f"Falta el título descriptivo de la figura '{label_text}'. El título debe estar FUERA de la figura, arriba de ella, y en CURSIVA.",
+                                     "Título (Cursiva) fuera de la figura", "No se encontró título antes de la figura", p_idx=p['index'], p_text=txt)
+                        else:
+                            is_italic = any(r.get('italic') for r in next_p.get('runs', []))
+                            is_next_bold = any(r.get('bold') for r in next_p.get('runs', []))
+                            n_align = next_p.get('alignment', 'left')
+                            if (next_p.get('indent_left') or 0) > 10:
+                                n_l_cm = round(next_p.get('indent_left') / 567.0, 2)
+                            else:
+                                n_l_cm = round(next_p.get('indent_left') or 0, 2)
 
-                        # NUEVO: Validar interlineado del título (2.0)
-                        n_line_spacing = next_p.get('line_spacing')
-                        if n_line_spacing is not None and abs(n_line_spacing - 2.0) > 0.2:
-                            self._add("Figuras", f"Interlineado Título: {next_p['text'][:20]}...", "error",
-                                     "El título de Figura debe tener interlineado 2.0.",
-                                     "2.0", str(n_line_spacing), p_idx=next_p['index'], p_text=next_p['text'])
+                            if (not is_italic) or is_next_bold:
+                                req_list = []
+                                act_list = []
+                                if not is_italic:
+                                    req_list.append("Cursiva")
+                                    act_list.append("Normal")
+                                if is_next_bold:
+                                    req_list.append("Sin Negrita")
+                                    act_list.append("Negrita")
+                                self._add("Figuras", f"Estilo Título: {next_p['text'][:20]}...", "error",
+                                         "El título descriptivo de la Figura debe estar en CURSIVA y SIN NEGRITA.",
+                                         ", ".join(req_list), ", ".join(act_list), p_idx=next_p['index'], p_text=next_p['text'])
 
-                        if n_align != 'left' and n_align != 'both':
-                            self._add("Figuras", f"Alineación Título: {next_p['text'][:20]}...", "error",
-                                     "El título descriptivo de la Figura debe estar alineado a la Izquierda.", "Izquierda", n_align, p_idx=next_p['index'], p_text=next_p['text'])
+                            # NUEVO: Validar tamaño de fuente del título (12pt)
+                            n_font_size = 0
+                            if next_p.get('runs'):
+                                n_font_size = next_p['runs'][0].get('size', 0)
+                            if n_font_size > 0 and abs(n_font_size - 12) > 0.5:
+                                self._add("Figuras", f"Tamaño Título: {next_p['text'][:20]}...", "error",
+                                         f"El título de Figura debe estar en 12 puntos. Hallado: {n_font_size}pt.",
+                                         "12pt", f"{n_font_size}pt", p_idx=next_p['index'], p_text=next_p['text'])
 
-                        if abs(n_l_cm - exp_l_cm) > 0.1:
-                            self._add("Figuras", f"Sangría Título: {next_p['text'][:20]}...", "warning",
-                                     f"El título descriptivo debe tener la misma sangría que el título de Nivel {context_level} ({exp_l_cm}cm).",
-                                     f"Izq {exp_l_cm}cm", f"Izq {n_l_cm}cm", p_idx=next_p['index'], p_text=next_p['text'])
+                            # NUEVO: Validar espaciado del título (anterior 0pt, posterior 0pt)
+                            n_s_before = next_p.get('spacing_before', 0)
+                            n_s_after = next_p.get('spacing_after', 0)
+                            if n_s_before > 1.0:
+                                self._add("Figuras", f"Espaciado Anterior Título: {next_p['text'][:20]}...", "error",
+                                         "El título de Figura debe tener espaciado anterior de 0pt.",
+                                         "0pt", f"{n_s_before}pt", p_idx=next_p['index'], p_text=next_p['text'])
+                            if n_s_after > 1.0:
+                                self._add("Figuras", f"Espaciado Posterior Título: {next_p['text'][:20]}...", "error",
+                                         "El título de Figura debe tener espaciado posterior de 0pt.",
+                                         "0pt", f"{n_s_after}pt", p_idx=next_p['index'], p_text=next_p['text'])
+
+                            # NUEVO: Validar interlineado del título (2.0)
+                            n_line_spacing = next_p.get('line_spacing')
+                            if n_line_spacing is not None and abs(n_line_spacing - 2.0) > 0.2:
+                                self._add("Figuras", f"Interlineado Título: {next_p['text'][:20]}...", "error",
+                                         "El título de Figura debe tener interlineado 2.0.",
+                                         "2.0", str(n_line_spacing), p_idx=next_p['index'], p_text=next_p['text'])
+
+                            if n_align != 'left' and n_align != 'both':
+                                self._add("Figuras", f"Alineación Título: {next_p['text'][:20]}...", "error",
+                                         "El título descriptivo de la Figura debe estar alineado a la Izquierda.", "Izquierda", n_align, p_idx=next_p['index'], p_text=next_p['text'])
+
+                            if abs(n_l_cm - exp_l_cm) > 0.1:
+                                self._add("Figuras", f"Sangría Título: {next_p['text'][:20]}...", "warning",
+                                         f"El título descriptivo debe tener la misma sangría que el título de Nivel {context_level} ({exp_l_cm}cm).",
+                                         f"Izq {exp_l_cm}cm", f"Izq {n_l_cm}cm", p_idx=next_p['index'], p_text=next_p['text'])
 
                 # 3.b: Verificar presencia de Nota o Fuente para la Figura
                 encontro_nota_fuente = False
@@ -227,20 +377,26 @@ class FigurasAuditor(BaseAuditor):
                                  "Las palabras 'Nota' o 'Fuente' deben terminar obligatoriamente con dos puntos (:).",
                                  "Nota: o Fuente:", first_word, p_idx=p['index'], p_text=txt)
 
+                    # REGLA ACTUALIZADA: "Nota:" / "Fuente:" debe estar en CURSIVA y con dos puntos.
+                    # El BOLD sigue prohibido.
                     is_italic = any(r.get('italic') for r in p.get('runs', []))
                     is_bold = any(r.get('bold') for r in p.get('runs', []))
 
-                    if is_italic or is_bold:
+                    label_word = txt.split(' ', 1)[0]  # "Nota:" o "Fuente:"
+                    label_is_italic = self._check_prefix_italic(p, len(label_word))
+
+                    if not label_is_italic or is_bold:
                         req_list = []
                         act_list = []
-                        if is_italic:
-                            req_list.append("Sin cursiva")
-                            act_list.append("Cursiva")
+                        if not label_is_italic:
+                            req_list.append("Cursiva")
+                            act_list.append("Normal")
                         if is_bold:
                             req_list.append("Sin negrita")
                             act_list.append("Negrita")
                         self._add("Figuras", f"Estilo Nota/Fuente: {txt[:15]}...", "error",
-                                 "La palabra 'Nota:' o 'Fuente:' (y su contenido) NO debe estar en cursiva ni en negrita.",
+                                 "La palabra 'Nota:' o 'Fuente:' DEBE estar en CURSIVA y "
+                                 "terminada con dos puntos (:). NO debe estar en negrita.",
                                  ", ".join(req_list), ", ".join(act_list), p_idx=p['index'], p_text=txt)
 
                     size = p['runs'][0].get('size', 0) if p.get('runs') else 0
@@ -269,16 +425,9 @@ class FigurasAuditor(BaseAuditor):
                                  "La Nota o Fuente debe tener interlineado 1.5.",
                                  "1.5", str(line_spacing), p_idx=p['index'], p_text=txt)
 
-                    note_level = p.get('body_level') or p.get('level') or 1
                     note_context_level = self._find_context_level(i)
                     note_exp_l_cm = self._get_expected_indent_for_level(note_context_level)
                     if abs(l_cm - note_exp_l_cm) > 0.1:
                         self._add("Figuras", f"Sangría Nota: {txt[:15]}", "warning",
                                  f"La nota/fuente de la figura debe tener la misma sangría que el título de Nivel {note_context_level} ({note_exp_l_cm}cm).",
                                  f"Izq {note_exp_l_cm}cm", f"Izq {l_cm}cm", p_idx=p['index'], p_text=txt)
-
-                    post_spacing = p.get('spacing_after', 0)
-                    if post_spacing < 14:
-                        self._add("Figuras", f"Espaciado Nota: {txt[:15]}", "warning",
-                                 "La nota/fuente debe tener un espaciado posterior de 15pt para separar de la siguiente sección.",
-                                 "15pt", f"{post_spacing}pt", p_idx=p['index'], p_text=txt)

@@ -70,6 +70,71 @@ class BaseAuditor:
                 return r["size"], r["bold"], r["italic"], r["font"]
         return 12, False, False, "Times New Roman"
 
+    def _is_meaningfully_bold(self, paragraph, threshold: float = 0.5):
+        """
+        Determina si un párrafo está en negrita basándose en la MAYORÍA de los
+        caracteres ALFANUMÉRICOS visibles (no en cualquier run insignificante).
+
+        Esto evita falsos positivos cuando solo un espacio, signo de puntuación
+        o run vacío tiene la marca bold pero el texto visible no lo está.
+
+        Args:
+            paragraph: dict con 'runs' (cada uno con 'text' y 'bold')
+            threshold: proporción mínima de caracteres en negrita para considerar
+                       el párrafo como "bold" (default 0.5 = mayoría)
+
+        Returns:
+            True si el párrafo es perceptiblemente negrita.
+        """
+        total_chars = 0
+        bold_chars = 0
+        for r in paragraph.get('runs', []):
+            text = r.get('text', '') or ''
+            for c in text:
+                if c.isalnum():
+                    total_chars += 1
+                    if r.get('bold'):
+                        bold_chars += 1
+        if total_chars == 0:
+            return False
+        return (bold_chars / total_chars) >= threshold
+
+    def _is_meaningfully_italic(self, paragraph, threshold: float = 0.5):
+        """Análogo a _is_meaningfully_bold pero para cursiva."""
+        total_chars = 0
+        italic_chars = 0
+        for r in paragraph.get('runs', []):
+            text = r.get('text', '') or ''
+            for c in text:
+                if c.isalnum():
+                    total_chars += 1
+                    if r.get('italic'):
+                        italic_chars += 1
+        if total_chars == 0:
+            return False
+        return (italic_chars / total_chars) >= threshold
+
+    def _has_any_bold_word(self, paragraph, min_word_len: int = 2):
+        """
+        Indica si HAY al menos una PALABRA completa (≥ min_word_len caracteres)
+        en negrita en el párrafo. Útil para casos donde una sola palabra resaltada
+        sí debe contar como error.
+        """
+        for r in paragraph.get('runs', []):
+            if not r.get('bold'):
+                continue
+            text = (r.get('text', '') or '').strip()
+            # Contar caracteres alfanuméricos seguidos
+            current_run = 0
+            for c in text:
+                if c.isalnum():
+                    current_run += 1
+                    if current_run >= min_word_len:
+                        return True
+                else:
+                    current_run = 0
+        return False
+
     def _find_context_level(self, paragraph_index, max_distance=150):
         """
         Busca hacia atrás desde paragraph_index para encontrar el último nivel de título.

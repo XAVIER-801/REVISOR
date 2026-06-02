@@ -1,10 +1,15 @@
 """
-reporte_similitud.py - Auditoría de la hoja de Reporte de Similitud (UNA Puno).
+reporte_similitud.py - Auditoría de la hoja de Reporte de Similitud (Turnitin).
 
-Reglas de la guía:
-- El reporte de similitud de la versión final es obligatorio.
-- El porcentaje de similitud no deberá superar el 20%.
-- Deben constar las firmas físicas o digitales del Asesor y de la Unidad de Investigación.
+IMPORTANTE: El Reporte de Similitud (Turnitin) viene SIEMPRE como UNA HOJA ESCANEADA
+(imagen) en las páginas preliminares. NO se audita su texto interno como párrafos normales.
+
+Reglas:
+- Verificar PRESENCIA del título/anexo "REPORTE DE SIMILITUD" en páginas preliminares
+- Detectar si la página correspondiente contiene una IMAGEN ESCANEADA grande
+- El porcentaje (≤ 20%) y las firmas se validan vía OCR (ai_engine/scanned_auditor.py)
+  cuando Tesseract está disponible. Aquí solo verificamos presencia.
+- NO buscar números/porcentajes en texto del cuerpo (causaba falsos positivos)
 """
 import re
 from .base_auditor import BaseAuditor
@@ -13,30 +18,35 @@ from .base_auditor import BaseAuditor
 class ReporteSimilitudAuditor(BaseAuditor):
 
     def audit(self):
-        found_section = False
-        text_lines = []
-        p_idx = 0
+        # 1. Buscar el título o anexo "REPORTE DE SIMILITUD" en páginas preliminares
+        section_title_idx = -1
+        section_title_p = None
 
-        # Buscar la sección "REPORTE DE SIMILITUD"
         for idx, p in enumerate(self.paragraphs):
             norm = p["norm"]
-            if "REPORTE DE SIMILITUD" in norm or "SIMILITUD" in norm:
-                found_section = True
-                p_idx = p["index"]
-                
-            if found_section:
-                # Capturar líneas hasta que encontremos la siguiente sección
-                if any(k in norm for k in ["HOJA DE JURADOS", "DEDICATORIA", "AGRADECIMIENTOS", "ÍNDICE", "INDICE"]):
-                    break
-                if p["text"].strip():
-                    text_lines.append(p["text"])
+            est_page = p.get("estimated_page", 1)
+            # Solo en páginas preliminares (antes del cuerpo)
+            if est_page > 10:
+                break
+            if ("REPORTE DE SIMILITUD" in norm or norm == "SIMILITUD"
+                or "REPORTE TURNITIN" in norm or "TURNITIN" in norm):
+                # Asegurar que no esté dentro del índice
+                sec_upper = p.get("section", "").upper()
+                if "INDICE" in sec_upper or "ÍNDICE" in sec_upper:
+                    continue
+                # Asegurar que no sea línea de índice (con relleno de puntos o número de página)
+                if "...." in p["text"] or re.search(r"\s+\d+$", p["text"].strip()):
+                    continue
+                section_title_idx = idx
+                section_title_p = p
+                break
 
-        # Detectar si hay páginas preliminares insertadas como imágenes escaneadas
+        # 2. Buscar imágenes escaneadas grandes en las primeras 8 páginas
+        #    (típico tamaño: > 10cm x > 14cm — equivalente a una hoja A4 completa)
         scanned_images = []
         for p in self.paragraphs:
             est_page = p.get("estimated_page", 1)
-            # Solo buscar en las primeras 6 páginas preliminares
-            if est_page > 6:
+            if est_page > 8:
                 break
             for d in p.get("drawings", []):
                 if d.get("width", 0) > 10.0 and d.get("height", 0) > 14.0:
@@ -44,53 +54,80 @@ class ReporteSimilitudAuditor(BaseAuditor):
                         "p_idx": p["index"],
                         "page": est_page,
                         "width": d["width"],
-                        "height": d["height"]
+                        "height": d["height"],
                     })
 
-        if not found_section:
-            # Fallback: si hay al menos una imagen escaneada en las páginas preliminares,
-            # asumimos de manera amigable que podría corresponder a este reporte
-            if scanned_images:
-                # Usar la primera imagen escaneada detectada (típicamente pág. 2 o 3)
-                target = scanned_images[0]
-                self._add("Reporte de Similitud", "Presencia de Reporte de Similitud", "warning",
-                          f"Se ha detectado el Reporte de Similitud en formato de imagen escaneada de alta resolución "
-                          f"({target['width']} cm x {target['height']} cm) en la Pág. {target['page']}. "
-                          f"Dado que está insertado como imagen, recuerde verificar manualmente que las firmas del Asesor "
-                          f"y de la Unidad de Investigación sean legibles y que el porcentaje oficial del PDF no supere el 20% máximo.",
-                          "Documento escaneado (Presente)", "Presente como Imagen", p_idx=target["p_idx"], p_text="[Imagen Escaneada]")
-                return
-            else:
-                self._add("Reporte de Similitud", "Presencia de Reporte de Similitud", "error",
-                          "No se encontró la sección obligatoria 'REPORTE DE SIMILITUD'. Toda tesis de pregrado debe incluir la página del reporte de similitud de la versión final.",
-                          "Presente", "Ausente")
-                return
+        # 3. Lógica de validación
+        if section_title_idx == -1 and not scanned_images:
+            # Ni título ni imagen → ausente
+            self._add(
+                "Reporte de Similitud",
+                "Presencia de Reporte de Similitud",
+                "error",
+                "No se encontró la página obligatoria del 'Reporte de Similitud' "
+                "(Turnitin) en las páginas preliminares. Esta hoja escaneada con el "
+                "porcentaje de similitud (debe ser menor o igual a 20%) es de "
+                "presentación obligatoria según la guía UNAP.",
+                "Reporte de Similitud presente (como imagen escaneada)",
+                "No detectado",
+            )
+            return
 
-        self._add("Reporte de Similitud", "Presencia de Reporte de Similitud", "passed",
-                  "Se encontró correctamente la sección obligatoria del Reporte de Similitud.",
-                  "Presente", "Presente", p_idx=p_idx, p_text="REPORTE DE SIMILITUD")
+        if section_title_idx != -1 and not scanned_images:
+            # Tiene título pero no imagen → probablemente el reporte está como texto, lo cual es atípico
+            self._add(
+                "Reporte de Similitud",
+                "Formato del Reporte de Similitud",
+                "warning",
+                "Se encontró el título 'REPORTE DE SIMILITUD' pero no una imagen "
+                "escaneada del reporte oficial. El reporte de Turnitin debe insertarse "
+                "como imagen escaneada con las firmas del Asesor y de la Unidad de "
+                "Investigación.",
+                "Imagen escaneada del reporte Turnitin",
+                "Solo título de sección, sin imagen",
+                p_idx=section_title_idx,
+                p_text=section_title_p["text"] if section_title_p else "",
+            )
+            return
 
-        # Buscar porcentaje de similitud
-        full_text = " ".join(text_lines)
-        sim_match = re.search(r'(\d+)\s*%', full_text)
-        
-        if sim_match:
-            percentage = int(sim_match.group(1))
-            ok_sim = percentage <= 20
-            status = "passed" if ok_sim else "error"
-            msg = (f"El porcentaje de similitud es de {percentage}%. Cumple con el límite institucional máximo permitido (20%)." if ok_sim else
-                   f"El porcentaje de similitud detectado es de {percentage}%, lo cual supera el límite máximo permitido por la UNA Puno (20%).")
-            self._add("Reporte de Similitud", "Porcentaje de Similitud", status, msg,
-                      "<= 20%", f"{percentage}%", p_idx=p_idx, p_text=full_text[:40])
-        else:
-            # Si no se encuentra explícitamente el porcentaje, lanzar advertencia
-            self._add("Reporte de Similitud", "Porcentaje de Similitud", "warning",
-                      "No se detectó un porcentaje de similitud en texto (ej. '15%'). Asegúrese de que el reporte digital contenga el porcentaje oficial.",
-                      "Límite <= 20%", "No detectado en texto", p_idx=p_idx, p_text="REPORTE DE SIMILITUD")
+        # 4. Hay imagen escaneada → presencia confirmada
+        target = scanned_images[0]
+        # Buscar la imagen escaneada más cercana al título (si existe)
+        if section_title_idx != -1:
+            for img in scanned_images:
+                if abs(img["p_idx"] - section_title_idx) < 20:
+                    target = img
+                    break
 
-        # Validar mención de firmas
-        has_firmas = "FIRMA" in full_text.upper() or "ASESOR" in full_text.upper()
-        if not has_firmas:
-            self._add("Reporte de Similitud", "Firmas en Reporte de Similitud", "warning",
-                      "Asegúrese de incluir las firmas físicas o digitales correspondientes (del Asesor y de la Unidad de Investigación) en esta página.",
-                      "Firmas del Asesor y UI presentas", "No detectado de forma clara", p_idx=p_idx, p_text="REPORTE DE SIMILITUD")
+        self._add(
+            "Reporte de Similitud",
+            "Presencia de Reporte de Similitud",
+            "passed",
+            f"Se detectó la hoja escaneada del Reporte de Similitud "
+            f"({target['width']} cm × {target['height']} cm) en la página {target['page']}. "
+            f"El porcentaje exacto y las firmas se verifican mediante OCR si Tesseract "
+            f"está disponible. Verifique manualmente que el porcentaje no supere el 20% y "
+            f"que estén las firmas del Asesor y de la Unidad de Investigación.",
+            "Imagen escaneada presente",
+            f"Presente en página {target['page']}",
+            p_idx=target["p_idx"],
+            p_text="[Hoja escaneada del Reporte de Similitud]",
+        )
+
+        # 5. Aviso informativo: la verificación profunda (porcentaje + firmas)
+        #    requiere OCR opcional
+        self._add(
+            "Reporte de Similitud",
+            "Verificación de Porcentaje y Firmas",
+            "warning",
+            "El porcentaje de similitud y las firmas del Reporte de Turnitin no se "
+            "validan automáticamente sobre el texto del documento (es una hoja "
+            "escaneada). Si el módulo OCR (Tesseract) está disponible, el sistema "
+            "intentará extraer estos datos. Caso contrario, verifique manualmente: "
+            "(1) que el porcentaje sea menor o igual a 20%, (2) que las firmas del "
+            "Asesor y de la Unidad de Investigación estén presentes (físicas o digitales, "
+            "no combinadas).",
+            "Porcentaje ≤ 20% y firmas presentes",
+            "Pendiente de verificación manual o por OCR",
+            p_idx=target["p_idx"],
+        )
