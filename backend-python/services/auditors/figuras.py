@@ -378,20 +378,38 @@ class FigurasAuditor(BaseAuditor):
                                  "Nota: o Fuente:", first_word, p_idx=p['index'], p_text=txt)
 
                     # REGLA ACTUALIZADA: "Nota:" / "Fuente:" debe estar en CURSIVA y con dos puntos.
-                    # El BOLD sigue prohibido.
-                    is_italic = any(r.get('italic') for r in p.get('runs', []))
-                    is_bold = any(r.get('bold') for r in p.get('runs', []))
+                    # El BOLD sigue prohibido SOLO para la palabra "Nota:"/"Fuente:" misma.
+                    # El resto del párrafo puede tener el formato que el estudiante quiera.
 
                     label_word = txt.split(' ', 1)[0]  # "Nota:" o "Fuente:"
-                    label_is_italic = self._check_prefix_italic(p, len(label_word))
+                    label_len = len(label_word)
+                    label_is_italic = self._check_prefix_italic(p, label_len)
 
-                    if not label_is_italic or is_bold:
+                    # Verificar si la palabra inicial está en negrita
+                    label_is_bold = False
+                    accumulated = 0
+                    for r in p.get('runs', []):
+                        r_txt = r.get('text', '')
+                        if not r_txt:
+                            continue
+                        for _ in r_txt:
+                            if accumulated < label_len:
+                                if r.get('bold'):
+                                    label_is_bold = True
+                                    break
+                                accumulated += 1
+                            else:
+                                break
+                        if label_is_bold or accumulated >= label_len:
+                            break
+
+                    if not label_is_italic or label_is_bold:
                         req_list = []
                         act_list = []
                         if not label_is_italic:
                             req_list.append("Cursiva")
                             act_list.append("Normal")
-                        if is_bold:
+                        if label_is_bold:
                             req_list.append("Sin negrita")
                             act_list.append("Negrita")
                         self._add("Figuras", f"Estilo Nota/Fuente: {txt[:15]}...", "error",

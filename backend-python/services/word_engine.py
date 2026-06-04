@@ -25,6 +25,7 @@ import os
 import re
 import unicodedata
 import zipfile
+import difflib
 from lxml import etree
 from utils.style_resolver import StyleResolver, parse_rpr, parse_ppr, NSMAP
 from utils.converter import DocConverter
@@ -65,6 +66,15 @@ from services.auditors.secuencia_tabla_figura import SecuenciaTablaFiguraAuditor
 # Palabras aproximadas por página en formato tesis
 _WORDS_PER_PAGE = 350
 
+SECTION_KEYWORDS = [
+    "DEDICATORIA", "AGRADECIMIENTOS", "INDICE GENERAL",
+    "INDICE DE TABLAS", "INDICE DE FIGURAS", "INDICE DE CUADROS", "INDICE DE ILUSTRACIONES",
+    "INDICE DE ANEXOS", "INDICE DE GRAFICOS", "INDICE", "CONTENIDO", "TABLA DE MATERIAS",
+    "TABLA DE CONTENIDOS", "TABLA DE CONTENIDO",
+    "RESUMEN", "ABSTRACT", "INTRODUCCION", "CONCLUSIONES", "RECOMENDACIONES",
+    "REFERENCIAS BIBLIOGRAFICAS", "ANEXOS", "DECLARACION JURADA", "AUTORIZACION PARA EL DEPOSITO",
+    "ACRONIMOS", "ACRÓNIMOS"
+]
 
 class WordAuditEngine:
     def __init__(self, file_path):
@@ -85,6 +95,36 @@ class WordAuditEngine:
             output_dir = os.path.dirname(self.original_path)
             self.working_path = DocConverter.standardize_to_docx(self.original_path, output_dir)
             self.document = Document(self.working_path)
+
+            # Detectar y eliminar el reporte previo si el documento ya fue auditado anteriormente
+            has_report = False
+            for p in self.document.paragraphs[:15]:
+                if "REPORTE INSTITUCIONAL DE AUDITORÍA" in p.text or "REPORTE INSTITUCIONAL DE AUDITORIA" in p.text:
+                    has_report = True
+                    break
+
+            if has_report:
+                report_end_idx = -1
+                for idx, p in enumerate(self.document.paragraphs):
+                    has_page_break = False
+                    for r in p.runs:
+                        brs = r._element.findall('.//w:br', NSMAP)
+                        if any(br.get(f'{{{NSMAP["w"]}}}type') == 'page' for br in brs):
+                            has_page_break = True
+                            break
+                    if has_page_break:
+                        report_end_idx = idx
+                        break
+
+                if report_end_idx != -1:
+                    for _ in range(report_end_idx + 1):
+                        p = self.document.paragraphs[0]
+                        p_element = p._element
+                        p_element.getparent().remove(p_element)
+                    self.document.save(self.working_path)
+                    # Recargar el documento limpio
+                    self.document = Document(self.working_path)
+
             self.resolver = StyleResolver(self.working_path)
             self._extract_data()
 
@@ -125,6 +165,14 @@ class WordAuditEngine:
             self._add("Sistema", "Error Crítico", "error", str(e))
             return self._finalize()
 
+    def _fuzzy_match(self, text, keywords, threshold=0.85):
+        """Busca si el texto coincide de forma difusa con alguna de las palabras clave."""
+        for kw in keywords:
+            ratio = difflib.SequenceMatcher(None, text, kw).ratio()
+            if ratio >= threshold:
+                return kw
+        return None
+
     # ══════════════════════════════════════════════════════════════════════
     # EXTRACCIÓN DE DATOS DEL DOCUMENTO
     # ══════════════════════════════════════════════════════════════════════
@@ -145,17 +193,21 @@ class WordAuditEngine:
             if lnNumType is None:
                 lnNumType = sectPr.find('w:lnNumType', NSMAP)
             if lnNumType is not None:
-                # Verificar que countBy >= 1 (numeración realmente visible)
                 count_by = lnNumType.get(f'{{{NSMAP["w"]}}}countBy')
                 if count_by is None:
                     count_by = lnNumType.get('countBy')
-                try:
-                    count_by_val = int(count_by) if count_by else 0
-                except (ValueError, TypeError):
-                    count_by_val = 0
-                if count_by_val >= 1:
+                if count_by is None:
+                    # En OOXML, si lnNumType está presente y countBy se omite, el valor por defecto es 1 (activo)
                     self.has_line_numbering = True
                     break
+                else:
+                    try:
+                        count_by_val = int(count_by)
+                    except (ValueError, TypeError):
+                        count_by_val = 0
+                    if count_by_val >= 1:
+                        self.has_line_numbering = True
+                        break
 
         # ── Parsear numbering.xml para mapear numId e ilvl a sus formatos de viñeta ──
         bullet_definitions = {}
@@ -204,15 +256,6 @@ class WordAuditEngine:
         page_words = 0
         current_section = "Inicio del Documento"
         in_index_zone = False
-        SECTION_KEYWORDS = [
-            "DEDICATORIA", "AGRADECIMIENTOS", "INDICE GENERAL",
-            "INDICE DE TABLAS", "INDICE DE FIGURAS", "INDICE DE CUADROS", "INDICE DE ILUSTRACIONES",
-            "INDICE DE ANEXOS", "INDICE DE GRAFICOS", "INDICE", "CONTENIDO", "TABLA DE MATERIAS",
-            "TABLA DE CONTENIDOS", "TABLA DE CONTENIDO",
-            "RESUMEN", "ABSTRACT", "INTRODUCCION", "CONCLUSIONES", "RECOMENDACIONES",
-            "REFERENCIAS BIBLIOGRAFICAS", "ANEXOS", "DECLARACION JURADA", "AUTORIZACION PARA EL DEPOSITO",
-            "ACRONIMOS", "ACRÓNIMOS"
-        ]
 
         table_eq_cache = {}
 
@@ -269,20 +312,21 @@ class WordAuditEngine:
             # Si no → la primera fila es el encabezado por defecto
             if explicit_header_rows:
                 # Si las explícitas son consecutivas desde el inicio, usarlas
-                header_row_indices = explicit_header_rows
+                header_row_indices = list(explicit_header_rows)
             else:
                 header_row_indices = [0]  # primera fila por defecto
 
             # ── Detectar celdas con vMerge="restart" en filas de encabezado ──
             # Las celdas que continúan ese merge (en filas posteriores) son
             # visualmente parte del encabezado, aunque estén vacías.
-            header_row_ids = {id(rows[i]) for i in header_row_indices}
-            self.header_rows_by_tbl[tbl_id] = header_row_ids
+            # ADEMÁS: si la fila 0 (o cualquier fila header) tiene vMerge="restart",
+            # las filas de continuación COMPLETAS también son encabezado
+            # (ej: tablas con encabezados de 2-3 filas con celdas combinadas).
 
             # Mapear columnas (considerando gridSpan) a su estado de header
             # Para cada fila de header, encontrar qué celdas tienen vMerge="restart"
             vmerge_header_cell_ids = set()
-            header_columns_with_vmerge = []  # lista de (row_idx, col_position)
+            header_columns_with_vmerge = []  # lista de (row_idx, col_position, grid_span)
 
             for h_idx in header_row_indices:
                 row = rows[h_idx]
@@ -307,10 +351,13 @@ class WordAuditEngine:
                     col_pos += grid_span
 
             # Buscar celdas en filas posteriores que continúen los vMerge del header
+            # Y PROMOVER esas filas a filas de encabezado
+            vmerge_continuation_row_indices = set()
             for h_idx, col_pos, span in header_columns_with_vmerge:
                 for r_idx in range(h_idx + 1, len(rows)):
                     row = rows[r_idx]
                     current_pos = 0
+                    found_continuation = False
                     for tc in row.findall('w:tc', NSMAP):
                         tc_pr = tc.find('w:tcPr', NSMAP)
                         this_span = 1
@@ -329,9 +376,75 @@ class WordAuditEngine:
 
                         if current_pos == col_pos and is_continue:
                             vmerge_header_cell_ids.add(id(tc))
+                            vmerge_continuation_row_indices.add(r_idx)
+                            found_continuation = True
                         current_pos += this_span
                         if current_pos > col_pos + span:
                             break
+                    # Si esta fila no tiene continuación del merge, las siguientes tampoco
+                    if not found_continuation:
+                        break
+
+            # Agregar las filas de continuación de vMerge al conjunto de header rows
+            for r_idx in vmerge_continuation_row_indices:
+                if r_idx not in header_row_indices:
+                    header_row_indices.append(r_idx)
+
+            # ── Heurística para encabezados multi-fila con gridSpan (sin vMerge) ──
+            # Caso típico: fila 1 tiene 1-2 celdas con gridSpan grande (título general),
+            # fila 2 tiene las sub-categorías, fila 3 tiene sub-sub-categorías.
+            # Todas son visualmente encabezado.
+            if len(rows) >= 3 and not explicit_header_rows:
+                # Contar celdas reales (sin contar gridSpan) por fila
+                def _count_cells(row_el):
+                    return len(row_el.findall('w:tc', NSMAP))
+
+                def _has_any_gridspan(row_el):
+                    for tc in row_el.findall('w:tc', NSMAP):
+                        tc_pr = tc.find('w:tcPr', NSMAP)
+                        if tc_pr is not None:
+                            gs = tc_pr.find('w:gridSpan', NSMAP)
+                            if gs is not None:
+                                try:
+                                    val = int(gs.get(f'{{{NSMAP["w"]}}}val', '1'))
+                                    if val > 1:
+                                        return True
+                                except (ValueError, TypeError):
+                                    pass
+                    return False
+
+                # Contar celdas de las filas de datos (filas 2+)
+                data_cell_counts = [_count_cells(rows[r]) for r in range(min(2, len(rows)), min(6, len(rows)))]
+                if data_cell_counts:
+                    typical_data_cells = max(data_cell_counts)
+                else:
+                    typical_data_cells = 0
+
+                first_row_cells = _count_cells(rows[0])
+                first_row_has_span = _has_any_gridspan(rows[0])
+
+                # Si la primera fila tiene menos celdas que las filas de datos
+                # (porque usa gridSpan para agrupar), detectar cuántas filas
+                # forman el encabezado multi-fila
+                if first_row_has_span and first_row_cells < typical_data_cells:
+                    # Las filas consecutivas desde el inicio que tengan gridSpan
+                    # o menos celdas que las filas de datos son parte del header
+                    for r_idx in range(1, min(4, len(rows))):  # máximo 4 filas de header
+                        row = rows[r_idx]
+                        row_cells = _count_cells(row)
+                        row_has_span = _has_any_gridspan(row)
+                        # La fila es header si:
+                        # - tiene gridSpan (agrupación de columnas)
+                        # - o tiene las mismas celdas que los datos (fila de sub-encabezados)
+                        #   PERO viene justo después de una fila con gridSpan
+                        if row_has_span or (r_idx == 1 and row_cells <= typical_data_cells):
+                            if r_idx not in header_row_indices:
+                                header_row_indices.append(r_idx)
+                        else:
+                            break
+
+            header_row_ids = {id(rows[i]) for i in header_row_indices}
+            self.header_rows_by_tbl[tbl_id] = header_row_ids
 
             self.vmerge_header_cells[tbl_id] = vmerge_header_cell_ids
 
@@ -380,7 +493,33 @@ class WordAuditEngine:
                 "ancestor_p_xml_id": id(ancestor_p) if ancestor_p is not None else None,
             })
 
+        # Pila para campos
+        fld_stack = []
+        is_in_toc = False
+
         for idx, p_el in enumerate(body.iter(f'{{{NSMAP["w"]}}}p')):
+            # Detectar límites de campos (especialmente TOC)
+            fld_chars = p_el.xpath('.//w:fldChar', namespaces=NSMAP)
+            instr_texts = p_el.xpath('.//w:instrText', namespaces=NSMAP)
+            
+            for fld in fld_chars:
+                fld_type = fld.get(f'{{{NSMAP["w"]}}}fldCharType')
+                if fld_type == 'begin':
+                    # Asumimos campo generico hasta leer instrText
+                    fld_stack.append('UNKNOWN')
+                elif fld_type == 'end':
+                    if fld_stack:
+                        popped = fld_stack.pop()
+                        if popped == 'TOC':
+                            is_in_toc = False
+
+            if fld_stack and fld_stack[-1] == 'UNKNOWN':
+                for it in instr_texts:
+                    if it.text and 'TOC' in it.text:
+                        fld_stack[-1] = 'TOC'
+                        is_in_toc = True
+                        break
+
             ppr_el = p_el.find('w:pPr', NSMAP)
             explicit_ppr = parse_ppr(ppr_el)
             style_id = explicit_ppr.get('style_id', 'Normal')
@@ -521,16 +660,17 @@ class WordAuditEngine:
             if not is_index_line and ("CAPITULO" in norm_txt or "INTRODUCCION" in norm_txt):
                 in_index_zone = False
 
-            for kw in SECTION_KEYWORDS:
-                if norm_txt == kw and not is_index_line:
-                    current_section = txt.strip()
-                    if kw == "ANEXOS" and self.anexos_start_idx == -1:
+            # Uso de fuzzy matching para identificar secciones (incluso con errores de tipeo)
+            if not is_index_line:
+                matched_kw = self._fuzzy_match(norm_txt, SECTION_KEYWORDS)
+                if matched_kw:
+                    current_section = matched_kw
+                    if matched_kw == "ANEXOS" and self.anexos_start_idx == -1:
                         first_run_size = runs[0].get('size', 0) if runs else 0
                         is_centered = res_ppr.get('alignment', 'left') == 'center'
                         is_bold = any(r.get('bold') for r in runs) if runs else False
                         if 14 <= first_run_size <= 18 and is_centered and is_bold:
                             self.anexos_start_idx = idx
-                    break
 
             if not in_index_zone:
                 cap_match = re.match(r"^CAPITULO\s+(I|V|X|L|C|[0-9]+)", norm_txt)
@@ -611,41 +751,19 @@ class WordAuditEngine:
             is_heading = False
             heading_level = None
 
+            # Detección por Nivel de Esquema (Outline Level)
+            outline_level = res_ppr.get('outline_level')
+            if outline_level is not None and outline_level < 9 and not in_table:
+                is_heading = True
+                heading_level = outline_level + 1
+
+            # Detección manual (fallback)
             hierarchy_match = re.match(r"^(\d+(?:\.\d+)+)\.?(?:[\s\t]+(.*))?$", txt.strip())
             if hierarchy_match and not in_table:
                 is_heading = True
                 heading_level = hierarchy_match.group(1).count('.') + 1
 
             num_pr = ppr_el.find('w:numPr', NSMAP) if ppr_el is not None else None
-            is_heading_style = bool(re.search(r'(heading|ttulo|titulo)', style_id, re.IGNORECASE))
-
-            if is_heading_style and not in_table:
-                is_heading = True
-                if num_pr is not None:
-                    ilvl_el = num_pr.find('w:ilvl', NSMAP)
-                    if ilvl_el is not None:
-                        heading_level = int(ilvl_el.get(f'{{{NSMAP["w"]}}}val')) + 1
-
-                if heading_level is None:
-                    m_style = re.search(r'(heading|ttulo|titulo)\s*(\d+)', style_id, re.IGNORECASE)
-                    if m_style:
-                        style_num = int(m_style.group(2))
-                        if style_num == 1:
-                            dec_match = re.match(r'^(\d+(?:\.\d+)+)', txt.strip())
-                            if dec_match and dec_match.group(1).count('.') >= 1:
-                                heading_level = 2
-                            else:
-                                heading_level = 1
-                        elif style_num == 2:
-                            heading_level = 2
-                        elif style_num == 3:
-                            heading_level = 3
-                        elif style_num == 4:
-                            heading_level = 4
-                        elif style_num == 5:
-                            heading_level = 5
-                        else:
-                            heading_level = style_num
 
             if not is_heading and num_pr is not None and not in_table:
                 ilvl_el = num_pr.find('w:ilvl', NSMAP)
@@ -718,6 +836,7 @@ class WordAuditEngine:
                 "textbox_text": textbox_text,
                 "looks_like_screenshot": looks_like_screenshot,
                 "screenshot_drawing": screenshot_drawing,
+                "is_in_toc_field": is_in_toc,
             })
 
         # Identificar la portada (primera página)
@@ -740,55 +859,67 @@ class WordAuditEngine:
             if p.get("has_page_break") or p.get("estimated_page", 1) > 1:
                 in_cover = False
 
-        # Encontrar el final del bloque de índices de forma totalmente robusta (max_index_idx)
+        # Encontrar el final del bloque de índices de forma robusta
+        # Primero intentar por la etiqueta exacta del XML (TOC field)
         self.index_start_idx = -1
         max_index_idx = -1
         
-        in_index_block = False
-        gap_count = 0
-        
-        for idx, p_data in enumerate(self.paragraphs):
-            norm_txt = p_data["norm"]
-            txt = p_data["text"].strip()
-            style = p_data.get("style_id", "")
+        toc_indices = [i for i, p in enumerate(self.paragraphs) if p.get("is_in_toc_field")]
+        if toc_indices:
+            self.index_start_idx = toc_indices[0]
+            # Podría haber varios índices juntos. max_index_idx será el último
+            max_index_idx = toc_indices[-1]
             
-            # Si encontramos el inicio real del cuerpo (no una línea de índice), terminamos la búsqueda
-            is_index_line = "...." in txt or bool(re.search(r"\s+\d+$", txt)) or style.upper().startswith("TOC") or style.upper().startswith("TDC")
-            if not is_index_line and ("CAPITULO" in norm_txt or "INTRODUCCION" in norm_txt):
-                break
+            # Buscar el título del índice justo antes del TOC field
+            for i in range(self.index_start_idx - 1, max(-1, self.index_start_idx - 5), -1):
+                if "INDICE" in self.paragraphs[i]["norm"] or "CONTENIDO" in self.paragraphs[i]["norm"]:
+                    self.index_start_idx = i
+                    break
+        else:
+            # Fallback heurístico original si el estudiante no usó índice automático
+            in_index_block = False
+            gap_count = 0
+            
+            for idx, p_data in enumerate(self.paragraphs):
+                norm_txt = p_data["norm"]
+                txt = p_data["text"].strip()
+                style = p_data.get("style_id", "")
+                
+                is_index_line = "...." in txt or bool(re.search(r"\s+\d+$", txt)) or style.upper().startswith("TOC") or style.upper().startswith("TDC")
+                if not is_index_line and ("CAPITULO" in norm_txt or "INTRODUCCION" in norm_txt):
+                    break
 
-            if not in_index_block:
-                is_index_title = norm_txt in [
-                    "INDICE GENERAL", "INDICE DE TABLAS", "INDICE DE FIGURAS", 
-                    "INDICE DE CUADROS", "INDICE DE ILUSTRACIONES", "INDICE DE ANEXOS", 
-                    "INDICE DE GRAFICOS", "INDICE", "CONTENIDO", "TABLA DE MATERIAS",
-                    "TABLA DE CONTENIDOS", "TABLA DE CONTENIDO"
-                ] or (norm_txt.startswith("INDICE") and len(norm_txt) < 40)
-                is_tdc = style.upper().startswith("TOC") or style.upper().startswith("TDC") if style else False
-                
-                if is_index_title or is_tdc:
-                    if self.index_start_idx == -1:
-                        self.index_start_idx = idx
-                    in_index_block = True
-                    gap_count = 0
-                    max_index_idx = idx
-                    continue
-                
-            if in_index_block:
-                is_tdc = style.upper().startswith("TOC") or style.upper().startswith("TDC") if style else False
-                is_idx_line = "...." in txt or bool(re.search(r"\s+\d+$", txt)) or is_tdc
-                
-                if is_idx_line or is_tdc:
-                    max_index_idx = idx
-                    gap_count = 0
-                else:
-                    gap_count += 1
+                if not in_index_block:
+                    is_index_title = norm_txt in [
+                        "INDICE GENERAL", "INDICE DE TABLAS", "INDICE DE FIGURAS", 
+                        "INDICE DE CUADROS", "INDICE DE ILUSTRACIONES", "INDICE DE ANEXOS", 
+                        "INDICE DE GRAFICOS", "INDICE", "CONTENIDO", "TABLA DE MATERIAS",
+                        "TABLA DE CONTENIDOS", "TABLA DE CONTENIDO"
+                    ] or (norm_txt.startswith("INDICE") and len(norm_txt) < 40)
+                    is_tdc = style.upper().startswith("TOC") or style.upper().startswith("TDC") if style else False
                     
-                # Si pasamos 10 párrafos sin características de índice, salimos del bloque de índice pero seguimos buscando
-                if gap_count > 10:
-                    in_index_block = False
-                    gap_count = 0
+                    if is_index_title or is_tdc:
+                        if self.index_start_idx == -1:
+                            self.index_start_idx = idx
+                        in_index_block = True
+                        gap_count = 0
+                        max_index_idx = idx
+                        continue
                     
+                if in_index_block:
+                    is_tdc = style.upper().startswith("TOC") or style.upper().startswith("TDC") if style else False
+                    is_idx_line = "...." in txt or bool(re.search(r"\s+\d+$", txt)) or is_tdc
+                    
+                    if is_idx_line or is_tdc:
+                        max_index_idx = idx
+                        gap_count = 0
+                    else:
+                        gap_count += 1
+                        
+                    if gap_count > 10:
+                        in_index_block = False
+                        gap_count = 0
+                        
         self.last_index_idx = max_index_idx
 
         # Encontrar el inicio del cuerpo del documento (después del índice)
@@ -860,15 +991,52 @@ class WordAuditEngine:
 
             p["body_level"] = current_body_level
 
-        # Registrar secciones encontradas
-        for p in self.paragraphs:
-            norm = p["norm"]
-            for kw in SECTION_KEYWORDS:
-                if norm == kw:
-                    self.sections_found.add(norm)
-                    break
-            if re.match(r"^CAPITULO\s+(I|V|X|L|C|[0-9]+)", norm):
-                self.sections_found.add("CAPITULO")
+        # Construir AST Jerárquico del Documento
+        self.document_tree = self._build_ast()
+
+    def _build_ast(self):
+        """Construye un árbol estructural del documento basado en body_level y secciones especiales."""
+        root = {"title": "Documento", "level": 0, "start_idx": 0, "end_idx": len(self.paragraphs)-1, "children": []}
+        stack = [root]
+
+        for idx, p in enumerate(self.paragraphs):
+            # Prioridad 1: Secciones especiales detectadas
+            is_special = False
+            title = None
+            if p.get("is_cover"):
+                title = "PORTADA"
+                is_special = True
+            elif self.index_start_idx != -1 and self.index_start_idx <= idx <= self.last_index_idx:
+                title = "INDICES"
+                is_special = True
+            elif p.get("section") and p["section"].upper() in SECTION_KEYWORDS:
+                title = p["section"].upper()
+                is_special = True
+            
+            # Prioridad 2: Títulos (headings y capítulos)
+            level = p.get("body_level", 0)
+            if (is_special or p.get("is_heading") or level > 0) and p["text"].strip():
+                node_title = title or p["text"].strip()
+                node_level = 1 if is_special else level
+                if node_level == 0:
+                    node_level = 1
+                
+                new_node = {"title": node_title, "level": node_level, "start_idx": idx, "end_idx": -1, "children": []}
+                
+                # Cerrar nodos del mismo o mayor nivel
+                while len(stack) > 1 and stack[-1]["level"] >= node_level:
+                    closed_node = stack.pop()
+                    closed_node["end_idx"] = idx - 1
+                
+                stack[-1]["children"].append(new_node)
+                stack.append(new_node)
+
+        # Cerrar los nodos pendientes
+        while len(stack) > 1:
+            closed_node = stack.pop()
+            closed_node["end_idx"] = len(self.paragraphs) - 1
+
+        return root
 
     # ══════════════════════════════════════════════════════════════════════
     # UTILIDADES COMPARTIDAS

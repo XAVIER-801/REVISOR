@@ -276,22 +276,39 @@ class TablasAuditor(BaseAuditor):
 
                     # REGLA ACTUALIZADA: "Nota:" / "Fuente:" debe estar en CURSIVA
                     # (cambio respecto a versiones anteriores) y con dos puntos.
-                    # El BOLD sigue prohibido.
-                    is_italic = any(r.get('italic') for r in p.get('runs', []))
-                    is_bold = any(r.get('bold') for r in p.get('runs', []))
+                    # El BOLD sigue prohibido SOLO para la palabra "Nota:"/"Fuente:" misma.
+                    # El resto del párrafo puede tener el formato que el estudiante quiera.
 
                     # Verificar la palabra inicial "Nota:" / "Fuente:" específicamente
-                    # (puede tener distinto formato del resto del párrafo)
                     label_word = txt.split(' ', 1)[0]  # "Nota:" o "Fuente:"
-                    label_is_italic = self._check_prefix_italic(p, len(label_word))
+                    label_len = len(label_word)
+                    label_is_italic = self._check_prefix_italic(p, label_len)
 
-                    if not label_is_italic or is_bold:
+                    # Verificar si la palabra inicial está en negrita
+                    label_is_bold = False
+                    accumulated = 0
+                    for r in p.get('runs', []):
+                        r_txt = r.get('text', '')
+                        if not r_txt:
+                            continue
+                        for _ in r_txt:
+                            if accumulated < label_len:
+                                if r.get('bold'):
+                                    label_is_bold = True
+                                    break
+                                accumulated += 1
+                            else:
+                                break
+                        if label_is_bold or accumulated >= label_len:
+                            break
+
+                    if not label_is_italic or label_is_bold:
                         req_list = []
                         act_list = []
                         if not label_is_italic:
                             req_list.append("Cursiva")
                             act_list.append("Normal")
-                        if is_bold:
+                        if label_is_bold:
                             req_list.append("Sin negrita")
                             act_list.append("Negrita")
                         self._add("Tablas", f"Estilo Nota/Fuente: {txt[:15]}...", "error",
@@ -417,13 +434,13 @@ class TablasAuditor(BaseAuditor):
         Audita el contenido dentro de las tablas con reportes CONSOLIDADOS por tabla.
 
         Reglas (Guía UNAP pág. 21):
-        - SOLO la primera fila (encabezado) en negrita y centrada
+        - Las filas de encabezado (pueden ser múltiples si hay celdas combinadas) en negrita y centradas
         - El resto de filas: NO debe estar en negrita
         - Interlineado interno: 1.0 o 1.5
 
-        Mejora: en lugar de emitir un reporte por CADA celda, agrupamos por
-        tabla y emitimos UN solo reporte por tabla con conteo de celdas afectadas.
-        Esto evita ruido cuando una tabla tiene muchas columnas.
+        Mejora: reconoce encabezados multi-fila (con celdas combinadas vertical
+        u horizontalmente). No reporta falsos positivos por negritas en filas
+        que forman parte del encabezado visual combinado.
         """
         # Agrupar párrafos de tabla por tabla a la que pertenecen
         headers_by_table = {}    # tbl_id → lista de párrafos del encabezado
@@ -489,9 +506,9 @@ class TablasAuditor(BaseAuditor):
                     "Tablas",
                     f"Encabezado sin negrita (pág. {page}, {count} celda{'s' if count != 1 else ''})",
                     "error",
-                    f"La primera fila de la tabla en la página {page} tiene "
-                    f"{count} celda{'s' if count != 1 else ''} sin negrita. Según la "
-                    f"Guía UNAP, todo el contenido de las celdas de la primera fila "
+                    f"La tabla en la página {page} tiene "
+                    f"{count} celda{'s' if count != 1 else ''} de encabezado sin negrita. Según la "
+                    f"Guía UNAP, todo el contenido de las celdas del encabezado "
                     f"debe estar en negrita. Ejemplo{'s' if count > 1 else ''}: {examples}.",
                     "Todas las celdas del encabezado en negrita",
                     f"{count} celda{'s' if count != 1 else ''} sin negrita",
@@ -506,8 +523,8 @@ class TablasAuditor(BaseAuditor):
                     "Tablas",
                     f"Encabezado sin centrar (pág. {page}, {count} celda{'s' if count != 1 else ''})",
                     "error",
-                    f"La primera fila de la tabla en la página {page} tiene "
-                    f"{count} celda{'s' if count != 1 else ''} sin centrar. Según la "
+                    f"La tabla en la página {page} tiene "
+                    f"{count} celda{'s' if count != 1 else ''} de encabezado sin centrar. Según la "
                     f"Guía UNAP, todo el contenido del encabezado debe estar centrado.",
                     "Todas las celdas del encabezado centradas",
                     f"{count} celda{'s' if count != 1 else ''} sin centrar",
@@ -534,7 +551,7 @@ class TablasAuditor(BaseAuditor):
                     f"Contenido con negrita (pág. {page}, {count} celda{'s' if count != 1 else ''})",
                     "warning",
                     f"La tabla en la página {page} tiene {count} celda{'s' if count != 1 else ''} "
-                    f"de contenido en negrita. Solo la PRIMERA FILA (encabezado) debe estar "
+                    f"de contenido en negrita. Solo las filas del encabezado deben estar "
                     f"en negrita. Las demás filas deben estar en estilo Normal. "
                     f"Ejemplo{'s' if count > 1 else ''}: {examples}.",
                     "Contenido en estilo Normal (sin negrita)",

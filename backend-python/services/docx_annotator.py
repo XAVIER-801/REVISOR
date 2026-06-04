@@ -283,7 +283,6 @@ class DocxAnnotator:
         Genera el texto del comentario en formato formal, sin iconos.
         Estructura clara y legible para revisión académica.
         """
-        page_info = f"Página {res.get('page')}" if res.get("page") else "Página no determinada"
         status = (res.get("status") or "").upper()
         severity_label = {
             "ERROR": "Severidad: Error crítico",
@@ -304,9 +303,7 @@ class DocxAnnotator:
             f"**Requerido:** {res.get('expected')}\n"
             f"\n"
             f"**Descripción:**\n"
-            f"{res.get('message')}\n"
-            f"\n"
-            f"**Ubicación:** {page_info}"
+            f"{res.get('message')}"
         )
 
     def _build_grouped_comment_text(self, observations):
@@ -318,15 +315,11 @@ class DocxAnnotator:
         if len(observations) == 1:
             return self._build_comment_text(observations[0])
 
-        # Determinar página y sección (tomar del primer resultado con datos)
-        page = None
+        # Determinar sección (tomar del primer resultado con datos)
         section = None
         for o in observations:
-            if page is None and o.get("page"):
-                page = o.get("page")
             if section is None and o.get("section"):
                 section = o.get("section")
-        page_info = f"Página {page}" if page else "Página no determinada"
         section = section or "General"
 
         # Determinar severidad global
@@ -349,7 +342,6 @@ class DocxAnnotator:
             f"Este párrafo tiene {n} observaciones de formato.\n"
             f"**Severidad más grave del grupo:** {global_severity}\n"
             f"**Sección:** {section}\n"
-            f"**Ubicación:** {page_info}\n"
             f"\n"
             f"────────────────────────────────────────\n"
         )

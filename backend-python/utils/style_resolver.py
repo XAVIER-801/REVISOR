@@ -85,6 +85,16 @@ def parse_ppr(ppr_el):
         if before: props['spacing_before'] = int(before) / 20 
         if after: props['spacing_after'] = int(after) / 20 
 
+    # Outline Level
+    outline_lvl = ppr_el.find('w:outlineLvl', NSMAP)
+    if outline_lvl is not None:
+        v = _val(outline_lvl)
+        if v is not None:
+            try:
+                props['outline_level'] = int(v)
+            except ValueError:
+                pass
+
     return props
 
 class StyleResolver:

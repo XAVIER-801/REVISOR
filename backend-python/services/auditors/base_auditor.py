@@ -170,6 +170,53 @@ class BaseAuditor:
 
         return 1
 
+    # ── Métodos para interactuar con el AST (Document Tree) ──────────────
+    
+    @property
+    def document_tree(self):
+        return getattr(self.engine, 'document_tree', None)
+
+    def get_paragraphs_in_node(self, node_title, exact=False):
+        """
+        Busca un nodo en el AST por su título y devuelve todos los párrafos 
+        comprendidos en su rango de índices.
+        """
+        if not self.document_tree:
+            return []
+
+        def _search(node):
+            if exact:
+                if node["title"] == node_title: return node
+            else:
+                if node_title in node["title"]: return node
+            for child in node["children"]:
+                res = _search(child)
+                if res: return res
+            return None
+
+        target_node = _search(self.document_tree)
+        if target_node and target_node["start_idx"] != -1 and target_node["end_idx"] != -1:
+            return self.paragraphs[target_node["start_idx"]:target_node["end_idx"] + 1]
+        return []
+
+    def get_ast_path(self, paragraph_index):
+        """
+        Devuelve la ruta de títulos (jerarquía) a la que pertenece un párrafo.
+        Útil para saber si un párrafo está dentro de "Anexos", "Capítulo 1", etc.
+        """
+        if not self.document_tree:
+            return []
+
+        path = []
+        def _traverse(node):
+            if node["start_idx"] <= paragraph_index <= node["end_idx"]:
+                path.append(node["title"])
+                for child in node["children"]:
+                    _traverse(child)
+        
+        _traverse(self.document_tree)
+        return path
+
     def audit(self):
         """Método principal que cada auditor debe implementar."""
         raise NotImplementedError("Cada auditor debe implementar audit()")

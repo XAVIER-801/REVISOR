@@ -129,13 +129,13 @@ class ConfiguracionPaginaAuditor(BaseAuditor):
             self._add(
                 "Configuración de Página",
                 "Numeración de Líneas Activa",
-                "warning",
+                "error",
                 "El documento tiene NUMERACIÓN DE LÍNEAS ACTIVA. Esos números secuenciales "
                 "(1, 2, 3...) que aparecen al margen izquierdo de cada página solo se permiten "
                 "en BORRADORES de revisión, NUNCA en la versión final de la tesis.\n\n"
                 "SOLUCIÓN: Pestaña 'Diseño' (o 'Disposición') → 'Números de línea' → "
                 "Seleccionar 'Ninguno'. Si tiene varias secciones, repita para cada sección.",
-                "Sin numeración de líneas en versión final",
+                "Ninguno (Sin numeración de líneas)",
                 "Numeración de líneas activa en alguna sección",
             )
         else:
