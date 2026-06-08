@@ -119,7 +119,7 @@ class AutorizacionDepositoAuditor(BaseAuditor):
                 "error",
                 "El título de la Autorización debe estar alineado a la izquierda.",
                 "Izquierda",
-                align,
+                self._align_display(align),
                 p_idx=idx,
                 p_text=txt,
             )

@@ -110,18 +110,20 @@ class EtiquetasJuradosAuditor(BaseAuditor):
         """
         FECHA DE SUSTENTACIÓN: debe cumplir:
         - Etiqueta en MAYÚSCULAS
-        - Negrita
+        - Toda la línea en Negrita
         - Alineación: Derecha
         - Espaciado: anterior 10pt, posterior 0pt
         - Sangría: sin sangría de ningún tipo
         """
         align = p.get('alignment', 'left')
-        is_bold = any(r.get('bold') for r in p.get('runs', []) if r.get('text', '').strip())
+        bold_runs = [r.get('bold') for r in p.get('runs', []) if r.get('text', '').strip()]
+        is_bold = all(bold_runs) if bold_runs else False
         indent_left_cm = round(p.get('indent_left') or 0, 2)
         indent_first_cm = round(p.get('indent_first') or 0, 2)
         indent_hanging_cm = round(p.get('indent_hanging') or 0, 2)
         s_before = p.get('spacing_before', 0) or 0
         s_after = p.get('spacing_after', 0) or 0
+        line_spacing = p.get('line_spacing')
 
         # Validar que la etiqueta esté en MAYÚSCULAS
         label_match = re.match(r'^(FECHA\s+DE\s+SUSTENTACI[ÓO]N\s*:)', txt, re.IGNORECASE)
@@ -136,10 +138,11 @@ class EtiquetasJuradosAuditor(BaseAuditor):
         ok_s_before = abs(s_before - 10.0) < 2.0
         ok_s_after = s_after < 1.0
         ok_indent = abs(indent_left_cm) < 0.1 and abs(indent_first_cm) < 0.1 and abs(indent_hanging_cm) < 0.1
+        ok_line_spacing = line_spacing is None or abs(line_spacing - 1.5) < 0.15
 
-        align_str = "Centrado" if align == "center" else ("Izquierda" if align == "left" else ("Derecha" if align == "right" else "Justificada"))
+        align_str = self._align_display(align)
 
-        passed = ok_case and ok_bold and ok_align and ok_s_before and ok_s_after and ok_indent
+        passed = ok_case and ok_bold and ok_align and ok_s_before and ok_s_after and ok_indent and ok_line_spacing
 
         if passed:
             expected_str = "Correcto"
@@ -165,79 +168,111 @@ class EtiquetasJuradosAuditor(BaseAuditor):
             if not ok_indent:
                 req_list.append("Sin sangría")
                 act_list.append(f"Sangría: izq {indent_left_cm}cm, 1ra {indent_first_cm}cm, fran {indent_hanging_cm}cm")
+            if not ok_line_spacing:
+                req_list.append("Interlineado 1.5")
+                act_list.append(f"{line_spacing}")
             expected_str = ", ".join(req_list)
             actual_str = ", ".join(act_list)
 
         self._add("Hoja de Jurados", "Formato \"FECHA DE SUSTENTACIÓN:\"",
                   "passed" if passed else "error",
-                  "La etiqueta 'FECHA DE SUSTENTACIÓN:' debe estar en MAYÚSCULAS, Negrita, alineada a la DERECHA, con espaciado anterior de 10pt y posterior de 0pt, y sin sangría de ningún tipo.",
+                  "La etiqueta 'FECHA DE SUSTENTACIÓN:' debe estar en MAYÚSCULAS, Negrita, alineada a la DERECHA, con espaciado anterior de 10pt y posterior de 0pt, sin sangría de ningún tipo e interlineado 1.5.",
                   expected_str, actual_str,
                   p_idx=p['index'], p_text=txt)
 
     def _audit_area_tema(self, p, txt, etiqueta):
         """
         ÁREA: y TEMA: deben cumplir:
-        - Etiqueta en MAYÚSCULAS
-        - Negrita
+        - Etiqueta (ÁREA: / TEMA:) en MAYÚSCULAS y NEGRITA
+        - Contenido después en minúscula y SIN negrita
         - Alineación: Izquierda
         - Espaciado: anterior 0pt, posterior 0pt
         - Sangría: sin sangría de ningún tipo
         """
         align = p.get('alignment', 'left')
-        is_bold = any(r.get('bold') for r in p.get('runs', []) if r.get('text', '').strip())
         indent_left_cm = round(p.get('indent_left') or 0, 2)
         indent_first_cm = round(p.get('indent_first') or 0, 2)
         indent_hanging_cm = round(p.get('indent_hanging') or 0, 2)
         s_before = p.get('spacing_before', 0) or 0
         s_after = p.get('spacing_after', 0) or 0
+        line_spacing = p.get('line_spacing')
 
-        # Validar que la etiqueta esté en MAYÚSCULAS
-        label_text = txt.split(':')[0] + ':'
+        # Separar label (ÁREA: / TEMA:) del contenido
+        colon_idx = txt.find(':')
+        label_text = txt[:colon_idx + 1] if colon_idx != -1 else txt
+        content_text = txt[colon_idx + 1:].strip() if colon_idx != -1 else ""
+
+        # Verificar label en MAYÚSCULAS y NEGRITA
         label_letters = re.sub(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ]', '', label_text)
-        is_uppercase = label_letters == label_letters.upper() if label_letters else True
+        label_is_upper = label_letters == label_letters.upper() if label_letters else True
 
-        # Evaluar cada regla
-        ok_case = is_uppercase
-        ok_bold = is_bold
+        # Verificar bold por runs (label vs content)
+        label_bold = False
+        content_bold = False
+        content_lower = True
+        acc = 0
+        for r in p.get('runs', []):
+            r_txt = r.get('text', '')
+            if not r_txt:
+                continue
+            r_bold = r.get('bold', False)
+            r_upper = r_txt.isupper() if r_txt.strip() else True
+            for c in r_txt:
+                if acc < colon_idx + 1:
+                    if not label_bold and r_bold:
+                        label_bold = True
+                else:
+                    if not content_bold and r_bold:
+                        content_bold = True
+                    if c.isalpha() and c.isupper():
+                        content_lower = False
+                acc += 1
+
         ok_align = align == 'left'
         ok_s_before = s_before < 1.0
         ok_s_after = s_after < 1.0
         ok_indent = abs(indent_left_cm) < 0.1 and abs(indent_first_cm) < 0.1 and abs(indent_hanging_cm) < 0.1
+        ok_line_spacing = line_spacing is None or abs(line_spacing - 1.5) < 0.15
 
-        align_str = "Centrado" if align == "center" else ("Izquierda" if align == "left" else ("Derecha" if align == "right" else "Justificada"))
+        align_str = self._align_display(align)
 
-        passed = ok_case and ok_bold and ok_align and ok_s_before and ok_s_after and ok_indent
+        req_list = []
+        act_list = []
+        if not label_is_upper:
+            req_list.append("Label MAYÚSCULAS")
+            act_list.append("Label minúscula")
+        if not label_bold:
+            req_list.append("Label NEGRITA")
+            act_list.append("Label normal")
+        if content_bold:
+            req_list.append("Contenido sin negrita")
+            act_list.append("Contenido en negrita")
+        if not content_lower and content_text:
+            req_list.append("Contenido minúscula")
+            act_list.append("Contenido mayúscula")
+        if not ok_align:
+            req_list.append("Izquierda")
+            act_list.append(align_str)
+        if not ok_s_before:
+            req_list.append("Esp. ant 0pt")
+            act_list.append(f"{s_before}pt")
+        if not ok_s_after:
+            req_list.append("Esp. post 0pt")
+            act_list.append(f"{s_after}pt")
+        if not ok_indent:
+            req_list.append("Sin sangría")
+            act_list.append(f"Sangría: izq {indent_left_cm}cm, 1ra {indent_first_cm}cm, fran {indent_hanging_cm}cm")
+        if not ok_line_spacing:
+            req_list.append("Interlineado 1.5")
+            act_list.append(f"{line_spacing}")
 
-        if passed:
-            expected_str = "Correcto"
-            actual_str = "Correcto"
-        else:
-            req_list = []
-            act_list = []
-            if not ok_case:
-                req_list.append("MAYÚSCULAS")
-                act_list.append("Minúsculas")
-            if not ok_bold:
-                req_list.append("Negrita")
-                act_list.append("Normal")
-            if not ok_align:
-                req_list.append("Izquierda")
-                act_list.append(align_str)
-            if not ok_s_before:
-                req_list.append("Esp. ant 0pt")
-                act_list.append(f"{s_before}pt")
-            if not ok_s_after:
-                req_list.append("Esp. post 0pt")
-                act_list.append(f"{s_after}pt")
-            if not ok_indent:
-                req_list.append("Sin sangría")
-                act_list.append(f"Sangría: izq {indent_left_cm}cm, 1ra {indent_first_cm}cm, fran {indent_hanging_cm}cm")
-            expected_str = ", ".join(req_list)
-            actual_str = ", ".join(act_list)
+        passed = len(req_list) == 0
+        expected_str = ", ".join(req_list) if req_list else "Correcto"
+        actual_str = ", ".join(act_list) if act_list else "Correcto"
 
         self._add("Hoja de Jurados", f"Formato \"{etiqueta}:\"",
                   "passed" if passed else "error",
-                  f"La etiqueta '{etiqueta}:' debe estar en MAYÚSCULAS, Negrita, alineada a la IZQUIERDA, con espaciado anterior y posterior de 0pt, y sin sangría de ningún tipo.",
+                  f"La etiqueta '{etiqueta}:' debe estar en MAYÚSCULAS y NEGRITA; el contenido después debe ir en minúscula y SIN negrita. Alineación izquierda, espaciado 0pt, sin sangría, interlineado 1.5.",
                   expected_str, actual_str,
                   p_idx=p['index'], p_text=txt)
 
@@ -251,12 +286,43 @@ class EtiquetasJuradosAuditor(BaseAuditor):
         - Verificar que en la línea siguiente esté el nombre del jurado a 11pt
         """
         align = p.get('alignment', 'left')
-        is_bold = any(r.get('bold') for r in p.get('runs', []) if r.get('text', '').strip())
-        l_cm = round((p.get('indent_left') or 0) / 567.0, 2) if (p.get('indent_left') or 0) > 10 else round(p.get('indent_left') or 0, 2)
+        bold_runs = [r.get('bold') for r in p.get('runs', []) if r.get('text', '').strip()]
+        is_bold = all(bold_runs) if bold_runs else False
+        l_cm = round(p.get('indent_left') or 0, 2)
         s_before = p.get('spacing_before', 0) or 0
         s_after = p.get('spacing_after', 0) or 0
         size, _, _, _ = self._get_p_props(p)
         line_spacing = p.get('line_spacing')
+
+        # Interlineado 1.5 (Guía UNAP)
+        if line_spacing is not None and abs(line_spacing - 1.5) > 0.15:
+            self._add(
+                "Hoja de Jurados",
+                f"Interlineado Cargo \"{cargo_label}\"",
+                "error",
+                f"El cargo '{cargo_label}' debe tener interlineado 1.5.",
+                "1.5",
+                f"{line_spacing}",
+                p_idx=p['index'],
+                p_text=txt,
+            )
+
+        # Capitalización: MAYÚSCULAS
+        txt_letters = re.sub(r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ]', '', txt)
+        is_uppercase = not any(c.islower() for c in txt_letters) if txt_letters else True
+
+        # Alineación Izquierda
+        if align != 'left':
+            self._add(
+                "Hoja de Jurados",
+                f"Alineación Cargo \"{cargo_label}\"",
+                "error",
+                f"El cargo '{cargo_label}' debe estar alineado a la IZQUIERDA.",
+                "Izquierda",
+                self._align_display(align),
+                p_idx=p['index'],
+                p_text=txt,
+            )
 
         # Tamaño 12pt
         if size and abs(size - 12) > 0.5:
@@ -264,48 +330,71 @@ class EtiquetasJuradosAuditor(BaseAuditor):
                 "Hoja de Jurados",
                 f"Tamaño Cargo \"{cargo_label}\"",
                 "error",
-                f"El cargo '{cargo_label}' debe ser de 12pt según la Guía UNAP.",
+                f"El cargo '{cargo_label}' debe ser de 12pt.",
                 "12pt",
                 f"{size}pt",
                 p_idx=p['index'],
                 p_text=txt,
             )
 
-        # Sangría izquierda 6cm
-        if abs(l_cm - 6.0) > 0.5:
+        # Sangría: sin sangría de ningún tipo
+        if abs(l_cm - 0.0) > 0.1:
             self._add(
                 "Hoja de Jurados",
                 f"Sangría Cargo \"{cargo_label}\"",
                 "error",
-                f"El cargo '{cargo_label}' debe tener sangría izquierda de 6cm según la Guía UNAP.",
-                "Izq 6cm",
+                f"El cargo '{cargo_label}' debe estar sin sangría de ningún tipo.",
+                "Sin sangría",
                 f"Izq {l_cm}cm",
                 p_idx=p['index'],
                 p_text=txt,
             )
 
-        # Negrita
+        # Negrita: debe estar en NEGRITA
         if not is_bold:
             self._add(
                 "Hoja de Jurados",
                 f"Negrita Cargo \"{cargo_label}\"",
-                "warning",
-                f"El cargo '{cargo_label}' debería estar sin negrita según la Guía UNAP.",
-                "Sin negrita",
+                "error",
+                f"El cargo '{cargo_label}' debe estar en NEGRITA.",
                 "Negrita",
+                "Normal",
                 p_idx=p['index'],
                 p_text=txt,
             )
 
-        # Espaciado posterior 30pt
-        if abs(s_after - 30.0) > 5.0:
+        # MAYÚSCULAS
+        if not is_uppercase:
+            self._add(
+                "Hoja de Jurados",
+                f"Mayúsculas Cargo \"{cargo_label}\"",
+                "error",
+                f"El cargo '{cargo_label}' debe estar en MAYÚSCULAS.",
+                "Mayúsculas",
+                "Minúsculas",
+                p_idx=p['index'],
+                p_text=txt,
+            )
+
+        # Espaciado anterior 0pt / posterior 0pt
+        if abs(s_before - 0.0) > 1.0:
+            self._add(
+                "Hoja de Jurados",
+                f"Espaciado Anterior Cargo \"{cargo_label}\"",
+                "error",
+                f"El cargo '{cargo_label}' debe tener espaciado anterior de 0pt.",
+                "0pt",
+                f"{s_before}pt",
+                p_idx=p['index'],
+                p_text=txt,
+            )
+        if abs(s_after - 0.0) > 1.0:
             self._add(
                 "Hoja de Jurados",
                 f"Espaciado Posterior Cargo \"{cargo_label}\"",
-                "warning",
-                f"El cargo '{cargo_label}' debería tener espaciado posterior de 30pt para "
-                f"separar del siguiente cargo (Guía UNAP).",
-                "30pt",
+                "error",
+                f"El cargo '{cargo_label}' debe tener espaciado posterior de 0pt.",
+                "0pt",
                 f"{s_after}pt",
                 p_idx=p['index'],
                 p_text=txt,

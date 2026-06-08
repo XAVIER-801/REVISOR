@@ -58,7 +58,7 @@ class TablasFigurasAuditor(BaseAuditor):
                 # 1. Alineación y Sangría
                 if align != 'left' and align != 'both':
                     self._add("Tablas y Figuras", f"Alineación Etiqueta: {label_text}", "error",
-                             f"La etiqueta de {lbl_type} debe estar alineada a la Izquierda.", "Izquierda", align, p_idx=p['index'], p_text=txt)
+                             f"La etiqueta de {lbl_type} debe estar alineada a la Izquierda.", "Izquierda", self._align_display(align), p_idx=p['index'], p_text=txt)
 
                 if abs(l_cm - exp_l_cm) > 0.1:
                     self._add("Tablas y Figuras", f"Sangría Etiqueta: {label_text}", "warning",
@@ -109,7 +109,7 @@ class TablasFigurasAuditor(BaseAuditor):
 
                             if n_align != 'left' and n_align != 'both':
                                 self._add("Tablas y Figuras", f"Alineación Título: {next_p['text'][:20]}...", "error",
-                                         f"El título descriptivo de la {lbl_type} debe estar alineado a la Izquierda.", "Izquierda", n_align, p_idx=next_p['index'], p_text=next_p['text'])
+                                          f"El título descriptivo de la {lbl_type} debe estar alineado a la Izquierda.", "Izquierda", self._align_display(n_align), p_idx=next_p['index'], p_text=next_p['text'])
 
                             if abs(n_l_cm - exp_l_cm) > 0.1:
                                 self._add("Tablas y Figuras", f"Sangría Título: {next_p['text'][:20]}...", "warning",
@@ -130,7 +130,7 @@ class TablasFigurasAuditor(BaseAuditor):
                         next_upper in ["INTRODUCCION", "RESUMEN", "ABSTRACT", "CONCLUSIONES", "RECOMENDACIONES", "REFERENCIAS BIBLIOGRAFICAS", "ANEXOS"]):
                         break
 
-                    if next_upper.startswith("NOTA") or next_upper.startswith("FUENTE"):
+                    if next_upper.split(' ', 1)[0].rstrip(':') in ("NOTA", "FUENTE"):
                         encontro_nota_fuente = True
                         break
 
@@ -140,7 +140,8 @@ class TablasFigurasAuditor(BaseAuditor):
                              "Nota: o Fuente: debajo", "Ausente", p_idx=p['index'], p_text=txt)
 
             # 4. Detectar "Nota" o "Fuente" y verificar formato
-            if upper.startswith("NOTA") or upper.startswith("FUENTE"):
+            first_word_upper = upper.split(' ', 1)[0].rstrip(':')
+            if first_word_upper in ("NOTA", "FUENTE"):
                 first_word = txt.split(' ', 1)[0]
                 has_colon = first_word.endswith(':')
 
@@ -193,7 +194,7 @@ class TablasFigurasAuditor(BaseAuditor):
                 if not is_bold or align != 'center':
                     self._add("Tablas y Figuras", f"Encabezado Tabla: {txt[:20]}...", "error",
                              "El encabezado de las tablas (primera fila) debe estar centrado y en negrita.",
-                             "Centrado, Negrita", f"{align}, {'Negrita' if is_bold else 'Normal'}", p_idx=p['index'], p_text=txt)
+                             "Centrado, Negrita", f"{self._align_display(align)}, {'Negrita' if is_bold else 'Normal'}", p_idx=p['index'], p_text=txt)
 
             line_spacing = p.get('line_spacing', 1.0)
             if abs(line_spacing - 1.0) > 0.2 and abs(line_spacing - 1.5) > 0.2:

@@ -14,15 +14,11 @@ from .base_auditor import BaseAuditor
 class PaginacionIndicesAuditor(BaseAuditor):
 
     def audit(self):
-        # 1. Pre-construir mapas de elementos reales del cuerpo
+        # 1. Pre-construir mapa de títulos del cuerpo
         body_headings = self._build_body_headings_map()
-        body_items = self._build_body_items_map()
 
-        # 2. Auditar cada uno de los 4 tipos de índices
+        # 2. Auditar solo el Índice General (preliminares sin numeración se omiten internamente)
         self._audit_indice_general_pages(body_headings)
-        self._audit_indice_tablas_pages(body_items)
-        self._audit_indice_figuras_pages(body_items)
-        self._audit_indice_anexos_pages(body_items)
 
     def _audit_indice_general_pages(self, body_headings):
         """Valida la consistencia de números de página en el Índice General."""
@@ -42,6 +38,15 @@ class PaginacionIndicesAuditor(BaseAuditor):
             
             upper = txt.upper()
             if bool(re.match(r'^P[ÁA]G\.?:?$', upper)) or "ÍNDICE" in upper:
+                continue
+
+            # Saltar secciones preliminares que NO llevan número de página visible
+            preliminares = [
+                'DEDICATORIA', 'AGRADECIMIENTO', 'AGRADECIMIENTOS',
+                'ACRÓNIMOS', 'ACRONIMOS',
+            ]
+            clean_upper = re.sub(r'[\.\s]+', '', upper).strip()
+            if clean_upper in preliminares:
                 continue
 
             page_match = re.search(r'(\d+)$', txt)
@@ -98,82 +103,6 @@ class PaginacionIndicesAuditor(BaseAuditor):
                       "Todas las páginas del Índice General coinciden exactamente con la ubicación real de sus títulos en el documento.",
                       "Páginas coincidentes", "Páginas coincidentes")
 
-    def _audit_indice_tablas_pages(self, body_items):
-        self._audit_special_index_pages(body_items, "ÍNDICE DE TABLAS", "Tabla", "Índice de Tablas")
-
-    def _audit_indice_figuras_pages(self, body_items):
-        self._audit_special_index_pages(body_items, "ÍNDICE DE FIGURAS", "Figura", "Índice de Figuras")
-
-    def _audit_indice_anexos_pages(self, body_items):
-        self._audit_special_index_pages(body_items, "ÍNDICE DE ANEXOS", "Anexo", "Índice de Anexos")
-
-    def _audit_special_index_pages(self, body_items, section_keyword, label_prefix, rule_name):
-        """Valida de forma genérica la paginación de un índice especial (Tablas, Figuras o Anexos)."""
-        idx_start, idx_end = self._find_index_range(section_keyword)
-        if idx_start == -1:
-            return
-
-        mismatches = []
-        pairs = []
-
-        for i in range(idx_start + 1, idx_end):
-            p = self.paragraphs[i]
-            txt = p['text'].strip()
-            if not txt:
-                continue
-
-            upper = txt.upper()
-            is_item = re.match(rf'^{label_prefix.upper()}\s+([A-Z0-9]+)', upper)
-            if not is_item:
-                continue
-
-            match = re.match(rf'^({label_prefix})\s+([A-Z0-9]+)(\.?)(.*)', txt, re.IGNORECASE)
-            if match:
-                prefix = match.group(1).capitalize()
-                num = match.group(2)
-
-                page_match = re.search(r'(\d+)$', txt.strip())
-                if page_match:
-                    page_num = int(page_match.group(1))
-                    key_item = f"{prefix} {num}"
-                    actual_page = body_items.get(key_item)
-
-                    if actual_page is not None:
-                        pairs.append({
-                            "title": f"{prefix} {num}",
-                            "page_num": page_num,
-                            "actual_page": actual_page
-                        })
-
-        if pairs:
-            diffs = [p["page_num"] - p["actual_page"] for p in pairs]
-            most_common_diff = Counter(diffs).most_common(1)[0][0]
-
-            for p in pairs:
-                if p["page_num"] - p["actual_page"] != most_common_diff:
-                    mismatches.append({
-                        "title": p["title"],
-                        "idx_page": p["page_num"],
-                        "real_page": p["actual_page"] + most_common_diff
-                    })
-
-        if mismatches:
-            examples = [f"'{m['title']}' (Índice: {m['idx_page']} vs Real: {m['real_page']})" for m in mismatches[:4]]
-            examples_str = ", ".join(examples)
-            if len(mismatches) > 4:
-                examples_str += "..."
-
-            detail = (f"La numeración de las páginas en el {rule_name} no coincide con la ubicación real en el documento. "
-                      f"Se detectaron {len(mismatches)} inconsistencias (Ejemplos: {examples_str}).")
-
-            self._add("Índice de Tablas/Figuras", f"Consistencia de Páginas del {rule_name}", "error", detail,
-                      "Páginas del índice coincidentes con las hojas reales",
-                      f"Se detectaron {len(mismatches)} inconsistencias", p_idx=idx_start, p_text=section_keyword)
-        else:
-            self._add("Índice de Tablas/Figuras", f"Consistencia de Páginas del {rule_name}", "passed",
-                      f"Todas las páginas del {rule_name} coinciden exactamente con la ubicación real de los elementos en el documento.",
-                      "Páginas coincidentes", "Páginas coincidentes")
-
     # ── Métodos Auxiliares de Construcción y Búsqueda ──────────────────────
 
     def _build_body_headings_map(self):
@@ -196,22 +125,6 @@ class PaginacionIndicesAuditor(BaseAuditor):
                 if norm and norm not in body_headings:
                     body_headings[norm] = p.get('estimated_page', 1)
         return body_headings
-
-    def _build_body_items_map(self):
-        body_items = {}
-        for p in self.paragraphs:
-            txt = p['text'].strip()
-            if not txt or not p.get('is_in_body', False):
-                continue
-            
-            m = re.match(r'^(Tabla|Figura|Anexo)\s+([A-Z0-9]+)', txt, re.IGNORECASE)
-            if m:
-                prefix = m.group(1).capitalize()
-                num = m.group(2)
-                key = f"{prefix} {num}"
-                if key not in body_items:
-                    body_items[key] = p.get('estimated_page', 1)
-        return body_items
 
     def _find_index_range(self, section_name):
         idx_start = -1

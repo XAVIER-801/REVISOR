@@ -75,14 +75,14 @@ class FigurasAuditor(BaseAuditor):
                         "error",
                         f"La imagen de la {element_type}{ref} de mayor tamaño debe estar centrada o alineada a la IZQUIERDA.",
                         "Alineación: Izquierda/Centrado",
-                        f"Alineación: {align.capitalize()}",
+                        self._align_display(align),
                         p_idx=p['index'],
                         p_text=f"[Imagen de {element_type}]",
                     )
                 else:
-                    self._add(category, f"Alineación de Imagen: {label_text}", "passed", "Alineación correcta", "Izquierda/Centrado", align, p_idx=p['index'])
+                    self._add(category, f"Alineación de Imagen: {label_text}", "passed", "Alineación correcta", "Izquierda/Centrado", self._align_display(align), p_idx=p['index'])
             else:
-                if align not in ('left', 'both', 'justify'):
+                if align not in ('left', 'both'):
                     self._add(
                         category,
                         f"Alineación de Imagen: {label_text}",
@@ -90,21 +90,20 @@ class FigurasAuditor(BaseAuditor):
                         f"La imagen de la {element_type}{ref} debe estar alineada a la IZQUIERDA, no centrada. "
                         f"La sangría es la que la posiciona horizontalmente según el nivel del título contextual al que pertenece.",
                         "Alineación: Izquierda",
-                        f"Alineación: {align.capitalize()}",
+                        self._align_display(align),
                         p_idx=p['index'],
                         p_text=f"[Imagen de {element_type}]",
                     )
                 else:
-                    self._add(category, f"Alineación de Imagen: {label_text}", "passed", "Alineación correcta", "Izquierda", align, p_idx=p['index'])
+                    self._add(category, f"Alineación de Imagen: {label_text}", "passed", "Alineación correcta", "Izquierda", self._align_display(align), p_idx=p['index'])
 
             # 2. Validar Sangría (debe coincidir con su nivel de título contextual)
             context_level = self._find_context_level(i)
             exp_l_cm = self._get_expected_indent_for_level(context_level)
             
-            l_val = p.get('indent_left') or 0
-            l_cm = round(l_val / 567.0, 2) if l_val > 10 else round(l_val, 2)
+            l_cm = round(p.get('indent_left') or 0, 2)
             
-            if align in ('left', 'both', 'justify'):
+            if align in ('left', 'both'):
                 if abs(l_cm - exp_l_cm) > 0.1:
                     self._add(
                         category,
@@ -206,7 +205,7 @@ class FigurasAuditor(BaseAuditor):
                 # 1. Alineación y Sangría
                 if align != 'left' and align != 'both':
                     self._add("Figuras", f"Alineación Etiqueta: {label_text}", "error",
-                             "La etiqueta de Figura debe estar alineada a la Izquierda.", "Izquierda", align, p_idx=p['index'], p_text=txt)
+                             "La etiqueta de Figura debe estar alineada a la Izquierda.", "Izquierda", self._align_display(align), p_idx=p['index'], p_text=txt)
 
                 if abs(l_cm - exp_l_cm) > 0.1:
                     self._add("Figuras", f"Sangría Etiqueta: {label_text}", "warning",
@@ -269,7 +268,7 @@ class FigurasAuditor(BaseAuditor):
                                 has_drawing = True
                                 break
 
-                        if has_drawing or next_upper.startswith("NOTA") or next_upper.startswith("FUENTE") or next_p.get('in_table'):
+                        if has_drawing or (next_upper.split(' ', 1)[0].rstrip(':') in ("NOTA", "FUENTE")) or next_p.get('in_table'):
                             self._add("Figuras", f"Secuencia: Título de {label_text}", "error",
                                      f"Falta el título descriptivo de la figura '{label_text}'. El título debe estar FUERA de la figura, arriba de ella, y en CURSIVA.",
                                      "Título (Cursiva) fuera de la figura", "No se encontró título antes de la figura", p_idx=p['index'], p_text=txt)
@@ -325,7 +324,7 @@ class FigurasAuditor(BaseAuditor):
 
                             if n_align != 'left' and n_align != 'both':
                                 self._add("Figuras", f"Alineación Título: {next_p['text'][:20]}...", "error",
-                                         "El título descriptivo de la Figura debe estar alineado a la Izquierda.", "Izquierda", n_align, p_idx=next_p['index'], p_text=next_p['text'])
+                                          "El título descriptivo de la Figura debe estar alineado a la Izquierda.", "Izquierda", self._align_display(n_align), p_idx=next_p['index'], p_text=next_p['text'])
 
                             if abs(n_l_cm - exp_l_cm) > 0.1:
                                 self._add("Figuras", f"Sangría Título: {next_p['text'][:20]}...", "warning",
@@ -346,7 +345,7 @@ class FigurasAuditor(BaseAuditor):
                         next_upper in ["INTRODUCCION", "RESUMEN", "ABSTRACT", "CONCLUSIONES", "RECOMENDACIONES", "REFERENCIAS BIBLIOGRAFICAS", "ANEXOS"]):
                         break
 
-                    if next_upper.startswith("NOTA") or next_upper.startswith("FUENTE"):
+                    if next_upper.split(' ', 1)[0].rstrip(':') in ("NOTA", "FUENTE"):
                         encontro_nota_fuente = True
                         break
 
@@ -356,7 +355,8 @@ class FigurasAuditor(BaseAuditor):
                              "Nota: o Fuente: debajo", "Ausente", p_idx=p['index'], p_text=txt)
 
             # 4. Detectar "Nota" o "Fuente" y verificar formato (Solo si corresponde a una figura previa)
-            if upper.startswith("NOTA") or upper.startswith("FUENTE"):
+            first_word_upper = upper.split(' ', 1)[0].rstrip(':')
+            if first_word_upper in ("NOTA", "FUENTE"):
                 # Verificar si el elemento previo más cercano con etiqueta era Tabla o Figura
                 es_de_figura = False
                 for k in range(i - 1, max(-1, i - 150), -1):

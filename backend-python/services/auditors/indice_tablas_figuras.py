@@ -8,6 +8,7 @@ Reglas implementadas:
 - Consistencia de páginas del índice vs páginas reales
 """
 import re
+from collections import Counter
 from .base_auditor import BaseAuditor
 
 
@@ -15,15 +16,17 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
 
     def audit(self):
         # ═══ VALIDAR TÍTULOS DE PÁGINA (16pt) ═══
-        # "ÍNDICE DE TABLAS", "ÍNDICE DE FIGURAS", "ÍNDICE DE ANEXOS" cuando son
-        # el ENCABEZADO de su propia página deben ser 16pt, centrados, negrita.
-        # (Cuando son ENTRADA dentro del Índice General, son 12pt — eso lo valida
-        # indice_general.py.)
         self._audit_page_titles()
+
+        # Pre-construir mapa de elementos reales del cuerpo para cruce de páginas
+        body_items = self._build_body_items_map()
 
         table_idx_start = -1
         figure_idx_start = -1
         annex_idx_start = -1
+        table_entries = []   # para cruce de páginas
+        figure_entries = []  # para cruce de páginas
+        annex_entries = []   # para cruce de páginas
 
         for i, p in enumerate(self.paragraphs):
             txt = p['text'].strip()
@@ -108,11 +111,7 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
 
                 # Regla 3: Sangría francesa específica por tipo de índice (Guía UNAP pág. 12-14)
                 # Tablas: 2.0 cm | Figuras: 2.15 cm | Anexos: 2.25 cm
-                h_ind = p.get('indent_hanging') or 0
-                h_cm = round(h_ind / 567.0, 2) if h_ind > 10 else round(h_ind, 2)
-                # Algunos motores guardan en cm ya; intentar interpretar correcto
-                if h_cm > 10:  # Si > 10, asumimos twips → convertir
-                    h_cm = round(h_ind / 567.0, 2)
+                h_cm = round(p.get('indent_hanging') or 0, 2)
 
                 expected_hang = None
                 if is_in_tables_index:
@@ -131,10 +130,10 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
 
                 # Regla 4: Alineación justificada (Guía pág. 12-14)
                 align = p.get('alignment', 'left')
-                if align not in ('both', 'justify'):
-                    self._add("Índice de Tablas/Figuras", f"Alineación: {prefix} {num}", "warning",
+                if align != 'both':
+                    self._add("Índice de Tablas/Figuras", f"Alineación: {prefix} {num}", "error",
                               f"Las entradas del índice deben estar justificadas.",
-                              "Justificada", align, p_idx=p['index'], p_text=txt)
+                              "Justificada", self._align_display(align), p_idx=p['index'], p_text=txt)
 
                 # ═══ Regla 5: ESTILO DIFERENCIADO DE LA ENTRADA ═══
                 # La etiqueta ("Tabla N" / "Figura N" / "Anexo N") debe ir en NEGRITA.
@@ -188,6 +187,22 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
                               f"Las entradas del índice deben ser de 12pt.",
                               "12pt", f"{size}pt", p_idx=p['index'], p_text=txt)
 
+                # Recolectar entrada para cruce de páginas
+                page_match = re.search(r'(?:\.{2,}|\s+)(\d+)\s*$', txt)
+                if page_match:
+                    entry = {'label': label, 'page': int(page_match.group(1)), 'p': p}
+                    if is_in_tables_index:
+                        table_entries.append(entry)
+                    elif is_in_figures_index:
+                        figure_entries.append(entry)
+                    elif is_in_annexes_index:
+                        annex_entries.append(entry)
+
+        # Cruce de páginas del índice vs contenido real
+        self._cross_reference_pages(table_entries, body_items, "Tablas", "ÍNDICE DE TABLAS")
+        self._cross_reference_pages(figure_entries, body_items, "Figuras", "ÍNDICE DE FIGURAS")
+        self._cross_reference_pages(annex_entries, body_items, "Anexos", "ÍNDICE DE ANEXOS")
+
         # Reportar presencia de hipervínculos
         self._report_hyperlinks(table_idx_start, "Tablas", "ÍNDICE DE TABLAS")
         self._report_hyperlinks(figure_idx_start, "Figuras", "ÍNDICE DE FIGURAS")
@@ -197,6 +212,108 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
         self._audit_index_spacing("ÍNDICE DE TABLAS", "Tablas")
         self._audit_index_spacing("ÍNDICE DE FIGURAS", "Figuras")
         self._audit_index_spacing("ÍNDICE DE ANEXOS", "Anexos")
+
+    def _build_body_items_map(self):
+        body_items = {}
+        in_annexes = False
+        for p in self.paragraphs:
+            txt = p['text'].strip()
+            if not txt:
+                continue
+
+            # Saltar párrafos dentro de los propios índices (falsos positivos)
+            sec_upper = p.get('section', '').upper()
+            if any(k in sec_upper for k in ['ÍNDICE DE TABLAS', 'INDICE DE TABLAS',
+                                             'ÍNDICE DE FIGURAS', 'INDICE DE FIGURAS',
+                                             'ÍNDICE DE ANEXOS', 'INDICE DE ANEXOS',
+                                             'ÍNDICE DE CUADROS', 'INDICE DE CUADROS',
+                                             'ÍNDICE DE ILUSTRACIONES', 'INDICE DE ILUSTRACIONES']):
+                continue
+
+            m = re.match(r'^(Tabla|Figura|Anexo)\s+([A-Z0-9]+)', txt, re.IGNORECASE)
+            if m:
+                pfx = m.group(1).capitalize()
+                num = m.group(2)
+                key = f"{pfx} {num}"
+                page = p.get('estimated_page', p.get('page', 1))
+                if key not in body_items and not in_annexes:
+                    body_items[key] = page
+
+            # Trackear si entramos a la sección de anexos
+            upper = txt.upper()
+            if any(k in upper for k in ['ÍNDICE DE ANEXOS', 'INDICE DE ANEXOS']) and '....' not in txt:
+                in_annexes = True
+        return body_items
+
+    def _cross_reference_pages(self, entries, body_items, label, section_name):
+        if not entries:
+            return
+        diffs = []
+        for e in entries:
+            label_key = e['label']
+            body_page = body_items.get(label_key)
+            if body_page is not None:
+                diff = body_page - e['page']
+                diffs.append(diff)
+
+        if not diffs:
+            return
+
+        # Calcular offset como moda de diferencias
+        diff_counter = Counter(diffs)
+        offset = diff_counter.most_common(1)[0][0]
+
+        mismatches = [(e, body_items.get(e['label'])) for e in entries
+                      if e['label'] in body_items
+                      and (body_items[e['label']] - e['page']) != offset]
+
+        total_checked = sum(1 for e in entries if e['label'] in body_items)
+        ok = len(mismatches) == 0
+
+        if ok and total_checked > 0:
+            first_label = entries[0]['label']
+            first_body = body_items.get(first_label)
+            first_detail = (f"'{first_label}' aparece en página {first_body} del documento"
+                            if first_body is not None
+                            else f"'{first_label}' (no encontrado en el cuerpo)")
+            self._add(
+                "Índice de Tablas/Figuras",
+                f"Cruce de páginas: {section_name}",
+                "passed",
+                f"Todas las páginas del {section_name} coinciden con el contenido real "
+                f"(offset estimado: {offset:+d}, basado en {total_checked} entradas). "
+                f"Ej: {first_detail} "
+                f"y listada como página {entries[0]['page']} en el índice "
+                f"(diferencia: {offset:+d}).",
+                f"Coinciden ({total_checked}/{total_checked})",
+                f"Coinciden",
+            )
+        else:
+            for e, body_p in mismatches[:5]:
+                list_diff = body_p - e['page']
+                self._add(
+                    "Índice de Tablas/Figuras",
+                    f"Cruce de páginas: {e['label']}",
+                    "error",
+                    f"El {section_name} lista '{e['label']}' en página {e['page']}, "
+                    f"pero el elemento real está en página {body_p} del documento "
+                    f"(diferencia observada: {list_diff:+d}, offset esperado: {offset:+d}). "
+                    f"Esto puede deberse a que se añadió o quitó contenido sin actualizar el índice.",
+                    f"Página {body_p}",
+                    f"Página {e['page']} (listada)",
+                    p_idx=e['p']['index'],
+                    p_text=e['p']['text'],
+                )
+            if len(mismatches) > 5:
+                self._add(
+                    "Índice de Tablas/Figuras",
+                    f"Cruce de páginas: {section_name} (restantes)",
+                    "warning",
+                    f"Se encontraron {len(mismatches)} entradas con página incorrecta en el "
+                    f"{section_name} (offset esperado: {offset:+d}).",
+                    f"Coincidentes: {total_checked - len(mismatches)}/{total_checked}",
+                    f"Incorrectas: {len(mismatches)}/{total_checked}",
+                )
 
     def _audit_page_titles(self):
         """

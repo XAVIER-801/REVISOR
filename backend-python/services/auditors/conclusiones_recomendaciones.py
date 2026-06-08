@@ -76,6 +76,7 @@ class ConclusionesRecomendacionesAuditor(BaseAuditor):
 
             align = p.get("alignment", "left")
             l_cm = round(p.get("indent_left") or 0, 2)
+            f_cm = round(p.get("indent_first") or 0, 2)
             h_cm = round(p.get("indent_hanging") or 0, 2)
             line_spacing = p.get("line_spacing", 2.0)
 
@@ -91,9 +92,28 @@ class ConclusionesRecomendacionesAuditor(BaseAuditor):
             if is_caso1:
                 # Validar CASO 1: Sangría izquierda 0cm, francesa 2.5cm
                 # Adicional: espaciado anterior 0/posterior 10, etiqueta PRIMERA: en negrita
-                ok_align = align in ["both", "justify"]
+                ok_align = align == 'both'
                 ok_indent = abs(l_cm) < 0.1 and abs(h_cm - 2.5) < 0.2
+                ok_no_first = abs(f_cm) < 0.1
                 ok_spacing = line_spacing is not None and abs(line_spacing - 2.0) < 0.15
+
+                # Espaciado anterior 0pt
+                if s_before > 1.0:
+                    self._add("Secciones Obligatorias",
+                              f"Espaciado Anterior {key_search} (Caso 1): {txt[:15]}...",
+                              "error",
+                              f"Las conclusiones/recomendaciones del Caso 1 deben tener espaciado "
+                              f"anterior de 0pt.",
+                              "0pt", f"{s_before}pt", p_idx=p["index"], p_text=txt)
+
+                # Sin sangría de primera línea
+                if not ok_no_first:
+                    self._add("Secciones Obligatorias",
+                              f"Sangría primera línea {key_search} (Caso 1): {txt[:15]}...",
+                              "error",
+                              f"Las conclusiones/recomendaciones del Caso 1 NO deben tener sangría "
+                              f"de primera línea.",
+                              "0cm", f"{f_cm}cm", p_idx=p["index"], p_text=txt)
 
                 # Espaciado posterior 10pt
                 if abs(s_after - 10.0) > 1.5:
@@ -117,32 +137,44 @@ class ConclusionesRecomendacionesAuditor(BaseAuditor):
                                   f"La etiqueta '{label}' debería estar en negrita para destacarla.",
                                   "Negrita", "Normal", p_idx=p["index"], p_text=txt)
 
-                passed = ok_align and ok_indent and ok_spacing
+                passed = ok_align and ok_indent and ok_no_first and ok_spacing
                 if passed:
                     self._add("Secciones Obligatorias", f"Formato {key_search} (Caso 1): {txt[:15]}...", "passed",
-                              f"La conclusión/recomendación sigue correctamente las reglas del Caso 1 (Sangría francesa 2.5cm, Justificado, Interlineado 2.0).",
-                              "Justificado, Izq 0cm, Francesa 2.5cm, Interlineado 2.0", "Cumple", p_idx=p["index"], p_text=txt)
+                              f"La conclusión/recomendación sigue correctamente las reglas del Caso 1 (Sangría francesa 2.5cm, Justificado, Interlineado 2.0, sin sangría primera línea).",
+                              "Justificado, Izq 0cm, Francesa 2.5cm, Interlineado 2.0, Sin 1ra línea", "Cumple", p_idx=p["index"], p_text=txt)
                 else:
                     req_list = []
                     act_list = []
                     if not ok_align:
                         req_list.append("Justificada")
-                        act_list.append(align)
+                        act_list.append(self._align_display(align))
                     if not ok_indent:
                         req_list.append("Izq 0cm, Francesa 2.5cm")
                         act_list.append(f"Izq {l_cm}cm, Francesa {h_cm}cm")
+                    if not ok_no_first:
+                        req_list.append("Sin sangría 1ra línea")
+                        act_list.append(f"1ra línea {f_cm}cm")
                     if not ok_spacing:
                         req_list.append("Interlineado 2.0")
                         act_list.append(str(line_spacing))
                     self._add("Secciones Obligatorias", f"Formato {key_search} (Caso 1): {txt[:15]}...", "error",
-                              f"Para el Caso 1 (enumerativo), el texto debe estar Justificado, con interlineado 2.0, sangría izquierda 0cm y sangría francesa de 2.5cm.",
+                              f"Para el Caso 1 (enumerativo), el texto debe estar Justificado, con interlineado 2.0, sangría izquierda 0cm y sangría francesa de 2.5cm, sin sangría de primera línea.",
                               ", ".join(req_list), ", ".join(act_list), p_idx=p["index"], p_text=txt)
 
             elif is_bullet:
                 # Validar CASO 2: Sangría izquierda 0cm, francesa 0.75cm
-                ok_align = align in ["both", "justify"]
+                ok_align = align == 'both'
                 ok_indent = abs(l_cm) < 0.1 and abs(h_cm - 0.75) < 0.2
                 ok_spacing = line_spacing is not None and abs(line_spacing - 2.0) < 0.15
+
+                # Espaciado anterior 0pt
+                if s_before > 1.0:
+                    self._add("Secciones Obligatorias",
+                              f"Espaciado Anterior {key_search} (Caso 2): {txt[:15]}...",
+                              "error",
+                              f"Las viñetas de conclusiones/recomendaciones (Caso 2) deben tener "
+                              f"espaciado anterior de 0pt.",
+                              "0pt", f"{s_before}pt", p_idx=p["index"], p_text=txt)
 
                 # Espaciado posterior 10pt entre viñetas (igual que Caso 1)
                 if abs(s_after - 10.0) > 1.5:
@@ -163,7 +195,7 @@ class ConclusionesRecomendacionesAuditor(BaseAuditor):
                     act_list = []
                     if not ok_align:
                         req_list.append("Justificada")
-                        act_list.append(align)
+                        act_list.append(self._align_display(align))
                     if not ok_indent:
                         req_list.append("Izq 0cm, Francesa 0.75cm")
                         act_list.append(f"Izq {l_cm}cm, Francesa {h_cm}cm")

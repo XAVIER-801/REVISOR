@@ -129,7 +129,7 @@ class CapituloNivel1Auditor(BaseAuditor):
                 if not ok_align:
                     self._add("Jerarquía", f"Alineación Capítulo/Nivel 1: {txt[:20]}...", "error",
                               f"El título de capítulo o nivel 1 '{txt[:30]}...' debe estar CENTRADO.",
-                              "Centrado", align, p_idx=p['index'], p_text=txt)
+                              "Centrado", self._align_display(align), p_idx=p['index'], p_text=txt)
 
                 if not ok_bold:
                     self._add("Jerarquía", f"Estilo Capítulo/Nivel 1: {txt[:20]}...", "error",
@@ -222,10 +222,10 @@ class CapituloNivel1Auditor(BaseAuditor):
                           "Normal (Sin Negrita)", "Negrita", p_idx=p['index'], p_text=txt[:40])
 
             # Alineación
-            if align not in ['both', 'justify']:
+            if align != 'both':
                 self._add("Estructura", "Alineación Contenido (Nivel 1)", "error",
                           "El contenido bajo nivel 1 debe tener alineación justificada.",
-                          "Justificada", align, p_idx=p['index'], p_text=txt[:40])
+                          "Justificada", self._align_display(align), p_idx=p['index'], p_text=txt[:40])
 
             # Interlineado
             line_spacing = p.get('line_spacing')

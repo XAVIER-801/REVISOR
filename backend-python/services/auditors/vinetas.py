@@ -88,18 +88,12 @@ class VinetasAuditor(BaseAuditor):
             # si no, fallback a ctx_level
             effective_level = current_level if current_level in (1, 2, 3, 4, 5) else ctx_level
 
-            # Determinar si es sub-viñeta
-            is_sub_bullet = False
-            exp_l_cm = 0.5
-            if effective_level in [1, 2]:
-                exp_l_cm = 0.5
-                if l_cm > 1.0: is_sub_bullet = True
-            elif effective_level == 3:
-                exp_l_cm = 1.75
-                if l_cm > 2.2: is_sub_bullet = True
-            elif effective_level >= 4:
-                exp_l_cm = 3.0
-                if l_cm > 3.5: is_sub_bullet = True
+            # Las sub-viñetas se detectan por SÍMBOLO DIFERENTE al de la
+            # viñeta principal, NO por sangría (todas comparten la misma sangría)
+            is_sub_bullet = (
+                current_bullet_symbol is not None
+                and detected_symbol != current_bullet_symbol
+            )
 
             # Para uso interno del resto de la función, current_level apunta al efectivo
             current_level = effective_level
@@ -120,10 +114,10 @@ class VinetasAuditor(BaseAuditor):
                           "Las viñetas deben estar en estilo Normal (Sin Negrita).",
                           "Normal (Sin Negrita)", "Negrita", p_idx=p['index'], p_text=txt)
 
-            if align not in ['both', 'justify']:
+            if align != 'both':
                 self._add("Viñetas", "Alineación Viñeta", "warning",
                           "Las viñetas deben tener alineación justificada.",
-                          "Justificada", align, p_idx=p['index'], p_text=txt)
+                          "Justificada", self._align_display(align), p_idx=p['index'], p_text=txt)
 
             line_spacing = p.get('line_spacing')
             if line_spacing is not None and abs(line_spacing - 2.0) > 0.2:
@@ -150,42 +144,45 @@ class VinetasAuditor(BaseAuditor):
                               "Las viñetas intermedias deben tener espaciado posterior de 0pt.",
                               "0pt", f"{s_after}pt", p_idx=p['index'], p_text=txt)
 
-            # 3. Indents
-            if not is_sub_bullet:
-                if current_level in [1, 2]:
-                    ok_l = abs(l_cm - 0.5) <= 0.1
-                    ok_h = abs(h_cm - 0.75) <= 0.1
-                    l_part = f"Izq {l_cm}cm" if ok_l else f"**Izq {l_cm}cm**"
-                    h_part = f"Fran {h_cm}cm" if ok_h else f"**Fran {h_cm}cm**"
-                    if not ok_l or not ok_h:
-                        self._add("Viñetas", "Sangría de Viñeta (Nivel 1/2)", "error",
-                                  "Las viñetas bajo nivel 1 o 2 deben tener Sangría Izquierda 0.5cm y Francesa 0.75cm.",
-                                  "Izq 0.5cm, Fran 0.75cm", f"{l_part}, {h_part}", p_idx=p['index'], p_text=txt)
-                elif current_level == 3:
-                    ok_l = abs(l_cm - 1.75) <= 0.1
-                    ok_h = abs(h_cm - 0.75) <= 0.1
-                    l_part = f"Izq {l_cm}cm" if ok_l else f"**Izq {l_cm}cm**"
-                    h_part = f"Fran {h_cm}cm" if ok_h else f"**Fran {h_cm}cm**"
-                    if not ok_l or not ok_h:
-                        self._add("Viñetas", "Sangría de Viñeta (Nivel 3)", "error",
-                                  "Las viñetas bajo nivel 3 deben tener Sangría Izquierda 1.75cm y Francesa 0.75cm.",
-                                  "Izq 1.75cm, Fran 0.75cm", f"{l_part}, {h_part}", p_idx=p['index'], p_text=txt)
-                elif current_level >= 4:
-                    ok_l = abs(l_cm - 3.0) <= 0.1
-                    ok_h = abs(h_cm - 0.75) <= 0.1
-                    l_part = f"Izq {l_cm}cm" if ok_l else f"**Izq {l_cm}cm**"
-                    h_part = f"Fran {h_cm}cm" if ok_h else f"**Fran {h_cm}cm**"
-                    if not ok_l or not ok_h:
-                        self._add("Viñetas", "Sangría de Viñeta (Nivel 4/5)", "error",
-                                  "Las viñetas bajo nivel 4 o 5 deben tener Sangría Izquierda 3.0cm y Francesa 0.75cm.",
-                                  "Izq 3.0cm, Fran 0.75cm", f"{l_part}, {h_part}", p_idx=p['index'], p_text=txt)
+            # 3. Indents (misma sangría para viñetas y sub-viñetas)
+            if current_level in [1, 2]:
+                exp_l = 0.5
+                ok_l = abs(l_cm - exp_l) <= 0.1
+                ok_h = abs(h_cm - 0.75) <= 0.1
+                if not ok_l or not ok_h:
+                    self._add("Viñetas", "Sangría de Viñeta (Nivel 1/2)", "error",
+                              "Las viñetas bajo nivel 1 o 2 deben tener Sangría Izquierda 0.5cm y Francesa 0.75cm.",
+                              f"Izq 0.5cm, Fran 0.75cm", f"Izq {l_cm}cm, Fran {h_cm}cm", p_idx=p['index'], p_text=txt)
+            elif current_level == 3:
+                exp_l = 1.75
+                ok_l = abs(l_cm - exp_l) <= 0.1
+                ok_h = abs(h_cm - 0.75) <= 0.1
+                if not ok_l or not ok_h:
+                    self._add("Viñetas", "Sangría de Viñeta (Nivel 3)", "error",
+                              "Las viñetas bajo nivel 3 deben tener Sangría Izquierda 1.75cm y Francesa 0.75cm.",
+                              f"Izq 1.75cm, Fran 0.75cm", f"Izq {l_cm}cm, Fran {h_cm}cm", p_idx=p['index'], p_text=txt)
+            elif current_level >= 4:
+                exp_l = 3.0
+                ok_l = abs(l_cm - exp_l) <= 0.1
+                ok_h = abs(h_cm - 0.75) <= 0.1
+                if not ok_l or not ok_h:
+                    self._add("Viñetas", "Sangría de Viñeta (Nivel 4/5)", "error",
+                              "Las viñetas bajo nivel 4 o 5 deben tener Sangría Izquierda 3.0cm y Francesa 0.75cm.",
+                              f"Izq 3.0cm, Fran 0.75cm", f"Izq {l_cm}cm, Fran {h_cm}cm", p_idx=p['index'], p_text=txt)
 
             # 4. Symbol consistency (Guía UNAP pág. 20)
             # "Las viñetas con un único tipo de símbolo"
             # "Las sub-viñetas con un único tipo de símbolo"
             # → ERROR (no warning) porque es regla explícita de la guía
             bullet_char = detected_symbol
+
+            # Si el bloque aún no tiene símbolo principal, esta viñeta lo define
+            if current_bullet_symbol is None:
+                current_bullet_symbol = bullet_char
+
             if is_sub_bullet:
+                # Consistencia entre sub-viñetas (automáticamente distinto al
+                # símbolo principal porque is_sub_bullet se define como cambio de símbolo)
                 if current_sub_bullet_symbol is None:
                     current_sub_bullet_symbol = bullet_char
                 elif bullet_char != current_sub_bullet_symbol:
@@ -197,9 +194,8 @@ class VinetasAuditor(BaseAuditor):
                               f"Símbolo mezclado: '{bullet_char}'",
                               p_idx=p['index'], p_text=txt)
             else:
-                if current_bullet_symbol is None:
-                    current_bullet_symbol = bullet_char
-                elif bullet_char != current_bullet_symbol:
+                # Consistencia entre viñetas principales
+                if bullet_char != current_bullet_symbol:
                     self._add("Viñetas", "Consistencia Símbolo Viñeta", "error",
                               f"Las viñetas deben usar UN ÚNICO tipo de símbolo en toda la lista "
                               f"(Guía UNAP pág. 20). Se detectó cambio de '{current_bullet_symbol}' a "

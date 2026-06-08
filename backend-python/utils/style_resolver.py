@@ -49,14 +49,27 @@ def parse_rpr(rpr_el):
                 break
     return props
 
+ALIGN_MAP = {
+    'left': 'left', 'start': 'left', 'l': 'left',
+    'center': 'center', 'centre': 'center', 'c': 'center',
+    'right': 'right', 'end': 'right', 'r': 'right',
+    'both': 'both', 'justify': 'both', 'justified': 'both', 'j': 'both',
+    'distribute': 'both', 'thaidistribute': 'both',
+    'highkashida': 'both', 'lowkashida': 'both', 'mediumkashida': 'both',
+    'numtab': 'left',
+}
+
 def parse_ppr(ppr_el):
     """Extrae propiedades de párrafo."""
     if ppr_el is None: return {}
     props = {}
 
-    # Alignment
+    # Alignment (normalizado: OOXML usa 'left','center','right','both'; algunos
+    # documentos legacy usan 'start'/'end' para RTL, o versiones localizadas)
     jc = ppr_el.find('w:jc', NSMAP)
-    if jc is not None: props['alignment'] = _val(jc)
+    if jc is not None:
+        raw = (_val(jc) or '').lower().strip()
+        props['alignment'] = ALIGN_MAP.get(raw, raw)
 
     # Indents (convertir de twips a cm: twips * 2.54 / 1440)
     ind = ppr_el.find('w:ind', NSMAP)

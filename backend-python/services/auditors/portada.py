@@ -43,7 +43,7 @@ class PortadaAuditor(BaseAuditor):
                 status = "passed" if (ok_size and ok_bold and ok_align) else "error"
                 msg = "El título inicial de la Universidad en la portada debe ser de tamaño 18pt, en Negrita y Centrado."
                 self._add("Portada", "Título de la Universidad", status, msg,
-                          "18pt, Negrita, Centrado", f"{size}pt, {'Negrita' if bold else 'Normal'}, {align}",
+                          "18pt, Negrita, Centrado", f"{size}pt, {'Negrita' if bold else 'Normal'}, {self._align_display(align)}",
                           p_idx=first_text_p["index"], p_text=txt)
             else:
                 self._add("Portada", "Título de la Universidad", "error",

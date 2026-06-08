@@ -49,9 +49,19 @@ class AnexosAuditor(BaseAuditor):
         ok_align = anexos_p.get('alignment') == 'center'
         ok_bold = bold == True
 
+        # Regla 1: debe comenzar en el PRIMER RENGLÓN (sin espacio anterior)
+        s_before_title = anexos_p.get('spacing_before', 0)
+        ok_first_line = abs(s_before_title) < 1.0
+        if not ok_first_line:
+            self._add("Anexos", "Título Principal 'ANEXOS' en primer renglón", "error",
+                      "El título 'ANEXOS' debe comenzar en el primer renglón de la página "
+                      "(sin espaciado anterior). Configure espaciado anterior a 0pt.",
+                      "Espaciado anterior 0pt", f"{s_before_title}pt",
+                      p_idx=anexos_idx, p_text=anexos_p['text'])
+
         self._add("Anexos", "Título Principal 'ANEXOS'", "passed" if (ok_size and ok_align and ok_bold) else "error",
                   "El título 'ANEXOS' debe ser de tamaño 16pt, centrado y en negrita.",
-                  "16pt, Centrado, Negrita", f"{size}pt, {anexos_p.get('alignment')}, {'Negrita' if bold else 'Normal'}",
+                  "16pt, Centrado, Negrita", f"{size}pt, {self._align_display(anexos_p.get('alignment'))}, {'Negrita' if bold else 'Normal'}",
                   p_idx=anexos_idx, p_text=anexos_p['text'])
 
         # 2. Auditar cada párrafo en la sección de Anexos
@@ -65,21 +75,37 @@ class AnexosAuditor(BaseAuditor):
 
             size, bold, italic, font = self._get_p_props(p)
             align = p.get('alignment', 'left')
-            l_ind = p.get('indent_left')
-            f_ind = p.get('indent_first')
-            h_ind = p.get('indent_hanging')
-            l_cm = round((l_ind or 0) / 567.0, 2)
-            f_cm = round((f_ind or 0) / 567.0, 2)
-            h_cm = round((h_ind or 0) / 567.0, 2)
+            l_cm = round(p.get('indent_left') or 0, 2)
+            f_cm = round(p.get('indent_first') or 0, 2)
+            h_cm = round(p.get('indent_hanging') or 0, 2)
 
-            # Aceptar tanto numerados (Anexo 1.) como literales (Anexo N.)
-            # Guía UNAP pág. 27-28 usa "Anexo N." para Declaración Jurada y
-            # Autorización para Depósito (que van al final sin numerar).
+            # Detectar cualquier línea que empiece con "Anexo" (para atrapar
+            # también formatos inválidos sin punto o con espacio antes del punto)
+            starts_with_anexo = bool(re.match(r"^Anexo\s+\d+|^Anexo\s+N", txt, re.IGNORECASE))
+
+            # Formato ESTRICTO: "Anexo 1." o "Anexo N." con punto inmediato
             annex_match = re.match(
-                r"^Anexo\s+(\d+|N)(?:\.\s*|\s+\.\s*|\s+)(.*)",
+                r"^Anexo\s+(\d+|N)\.\s+(.*)",
                 txt,
                 re.IGNORECASE,
-            )
+            ) if starts_with_anexo else None
+
+            if starts_with_anexo and not annex_match:
+                # El párrafo dice "Anexo X" pero sin el formato correcto
+                num_raw = re.search(r"\d+|N", txt, re.IGNORECASE)
+                num_str = num_raw.group(0) if num_raw else "X"
+                self._add(
+                    "Anexos",
+                    f"Formato Anexo {num_str}",
+                    "error",
+                    f"Formato incorrecto. Debe ser: 'Anexo {num_str}. Título del anexo' "
+                    f"(con punto inmediatamente después del número, sin espacio antes del punto). "
+                    f"Ej: 'Anexo {num_str}. Autorización para el depósito...'",
+                    f"Anexo {num_str}. Título...",
+                    txt[:30],
+                    p_idx=i,
+                    p_text=txt,
+                )
 
             if annex_match:
                 num_str = annex_match.group(1)
@@ -108,24 +134,6 @@ class AnexosAuditor(BaseAuditor):
                             p_idx=i,
                             p_text=txt[:40],
                         )
-
-                # ═══ Validación del punto después del número/N ═══
-                has_dot = bool(re.match(r"^Anexo\s+(\d+|N)\.", txt, re.IGNORECASE))
-                if not has_dot:
-                    self._add(
-                        "Anexos",
-                        f"Formato Anexo {num_display}",
-                        "error",
-                        f"La etiqueta 'Anexo {num_display}' en la sección de Anexos DEBE "
-                        f"estar seguida por un punto (.) y un espacio antes del título. "
-                        f"Formato correcto: 'Anexo {num_display}. Autorización para el depósito "
-                        f"de tesis en el Repositorio Institucional'. "
-                        f"Nota: en el ÍNDICE de Anexos NO va punto (formato distinto).",
-                        f"Anexo {num_display}.",
-                        txt[:25],
-                        p_idx=i,
-                        p_text=txt,
-                    )
 
                 # ═══ Secuencia (solo para anexos numerados) ═══
                 if not is_literal_N:
@@ -198,7 +206,7 @@ class AnexosAuditor(BaseAuditor):
                 if not ok_align:
                     self._add("Anexos", f"Alineación Título Anexo {num}", "error",
                               f"El título del Anexo {num} debe estar alineado a la izquierda.",
-                              "Izquierda", align, p_idx=i, p_text=txt)
+                              "Izquierda", self._align_display(align), p_idx=i, p_text=txt)
 
                 line_spacing = p.get('line_spacing') or 2.0
                 ok_spacing = abs(line_spacing - 2.0) < 0.2
@@ -227,7 +235,7 @@ class AnexosAuditor(BaseAuditor):
                     if not ok_align:
                         self._add("Anexos", "Alineación Contenido Anexo", "warning",
                                   "El contenido de los anexos debe estar alineado a la izquierda.",
-                                  "Izquierda", align, p_idx=i, p_text=txt[:40])
+                                  "Izquierda", self._align_display(align), p_idx=i, p_text=txt[:40])
 
                     line_spacing = p.get('line_spacing') or 2.0
                     ok_spacing = abs(line_spacing - 2.0) < 0.2

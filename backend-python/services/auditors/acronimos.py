@@ -93,7 +93,7 @@ class AcronimosAuditor(BaseAuditor):
                 act_list = []
                 if not ok_align:
                     req_list.append("Centrado")
-                    act_list.append(align)
+                    act_list.append(self._align_display(align))
                 if not ok_size:
                     req_list.append("16pt")
                     act_list.append(f"{size}pt")
@@ -202,7 +202,7 @@ class AcronimosAuditor(BaseAuditor):
                 act_list = []
                 if not ok_align:
                     req_list.append("Izquierda")
-                    act_list.append(align)
+                    act_list.append(self._align_display(align))
                 if not ok_line:
                     req_list.append(req_spacing_str)
                     act_list.append(str(line_spacing if line_spacing is not None else "Defecto/1.0"))

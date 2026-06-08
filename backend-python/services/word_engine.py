@@ -61,6 +61,7 @@ from services.auditors.cuadros_texto import CuadrosTextoAuditor
 from services.auditors.capturas import CapturasAuditor
 from services.auditors.ortografia import OrtografiaAuditor
 from services.auditors.numeracion_paginas import NumeracionPaginasAuditor
+from services.auditors.espaciado_titulos_contenido import EspaciadoTitulosContenidoAuditor
 from services.auditors.secuencia_tabla_figura import SecuenciaTablaFiguraAuditor
 
 # Palabras aproximadas por página en formato tesis
@@ -148,6 +149,7 @@ class WordAuditEngine:
             VinetasAuditor(self).audit()               # 🔹 Viñetas (todos los niveles)
             ConfiguracionPaginaAuditor(self).audit()   # ⚙️ Configuración de página
             NumeracionPaginasAuditor(self).audit()     # 🔢 Numeración de páginas (preliminares sin número)
+            EspaciadoTitulosContenidoAuditor(self).audit()  # 📐 Espaciado títulos, contenido y viñetas
             EstiloEscrituraAuditor(self).audit()       # ✍️ Estilo de escritura
             CuadrosTextoAuditor(self).audit()          # 🚫 Cuadros de texto (evasión Turnitin)
             CapturasAuditor(self).audit()              # 🚫 Capturas de pantalla con texto
@@ -993,6 +995,23 @@ class WordAuditEngine:
 
         # Construir AST Jerárquico del Documento
         self.document_tree = self._build_ast()
+
+    def extract_metadata(self):
+        """Extrae metadatos del documento para el sistema de aprendizaje."""
+        try:
+            import os
+            mtime = os.path.getmtime(self.original_path)
+            from datetime import datetime
+            mod_date = datetime.fromtimestamp(mtime).isoformat()
+        except Exception:
+            mod_date = ""
+        return {
+            "filename": os.path.basename(self.original_path),
+            "file_size": os.path.getsize(self.original_path) if os.path.exists(self.original_path) else 0,
+            "paragraph_count": len(self.paragraphs),
+            "section_count": len(self.sections_found),
+            "modified_date": mod_date,
+        }
 
     def _build_ast(self):
         """Construye un árbol estructural del documento basado en body_level y secciones especiales."""

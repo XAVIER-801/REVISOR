@@ -90,7 +90,7 @@ class AbstractAuditor(BaseAuditor):
         if align != "center":
             self._add("Resumen y Abstract", "Alineación Título ABSTRACT", "error",
                       "El título 'ABSTRACT' debe estar centrado.",
-                      "Centrado", align, p_idx=idx, p_text=txt)
+                      "Centrado", self._align_display(align), p_idx=idx, p_text=txt)
         if not bold:
             self._add("Resumen y Abstract", "Negrita Título ABSTRACT", "error",
                       "El título 'ABSTRACT' debe estar en negrita.",
@@ -122,10 +122,10 @@ class AbstractAuditor(BaseAuditor):
             self._add("Resumen y Abstract", "Tamaño Contenido Abstract", "error",
                       "El contenido del abstract debe ser de 12pt.",
                       "12pt", f"{size}pt", p_idx=idx, p_text=txt[:40])
-        if align not in ("both", "justify"):
+        if align != 'both':
             self._add("Resumen y Abstract", "Alineación Contenido Abstract", "error",
                       "El contenido del abstract debe estar justificado.",
-                      "Justificada", align, p_idx=idx, p_text=txt[:40])
+                      "Justificada", self._align_display(align), p_idx=idx, p_text=txt[:40])
         if line_spacing and abs(line_spacing - 2.0) > 0.2:
             self._add("Resumen y Abstract", "Interlineado Contenido Abstract", "error",
                       "El contenido del abstract debe tener interlineado 2.0.",

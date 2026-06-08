@@ -71,7 +71,7 @@ class ReferenciasBibliograficasAuditor(BaseAuditor):
                         act_list.append(f"{size}pt")
                     if not ok_align:
                         req_list.append("Centrado")
-                        act_list.append(align)
+                        act_list.append(self._align_display(align))
                     if not ok_bold:
                         req_list.append("Negrita")
                         act_list.append("Normal")
@@ -117,7 +117,7 @@ class ReferenciasBibliograficasAuditor(BaseAuditor):
             is_vancouver = bool(re.match(r'^(\[\d+\]|\d+\.?)\s+', txt))
 
             ok_size = size == 12 or size == 0
-            ok_align = align in ["both", "justify"]
+            ok_align = align == 'both'
             ok_line_spacing = line_spacing is not None and abs(line_spacing - 1.5) < 0.2
             # ═══ ESPACIADO: anterior 0pt, posterior 10pt ═══
             ok_sb = s_before < 1.0
@@ -146,7 +146,7 @@ class ReferenciasBibliograficasAuditor(BaseAuditor):
                     act_list.append(f"{size}pt")
                 if not ok_align:
                     req_list.append("Justificada")
-                    act_list.append(align)
+                    act_list.append(self._align_display(align))
                 if not ok_line_spacing:
                     req_list.append("Interlineado 1.5")
                     act_list.append(str(line_spacing))

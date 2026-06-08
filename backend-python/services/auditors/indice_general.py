@@ -67,8 +67,6 @@ class IndiceGeneralAuditor(BaseAuditor):
                           "El interlineado de todas las entradas en el Índice General es correcto (2.0).",
                           "2.0", "2.0", p_idx=idx_start, p_text="ÍNDICE GENERAL")
 
-        # === PASO 1.5: Construir mapa de títulos del cuerpo ===
-        body_headings = self._build_body_headings_map(idx_end)
         # === PASO 2: Auditar cada entrada del índice ===
         for i in range(idx_start, idx_end):
             p = self.paragraphs[i]
@@ -97,7 +95,7 @@ class IndiceGeneralAuditor(BaseAuditor):
                 if align != 'center':
                     self._add("Índice General", f"Alineación título: {txt}", "error",
                              "El título 'ÍNDICE GENERAL' debe estar centrado.",
-                             "Centrado", align, p_idx=p['index'], p_text=txt)
+                             "Centrado", self._align_display(align), p_idx=p['index'], p_text=txt)
                 continue
 
             # Formato de la entrada
@@ -110,7 +108,7 @@ class IndiceGeneralAuditor(BaseAuditor):
             is_uppercase = not any(c.islower() for c in txt_letters) if txt_letters else True
             has_dots_or_page = '....' in txt or bool(re.search(r'\d+$', txt.strip()))
 
-            align_str_raw = "Centrado" if align == "center" else ("Izquierda" if align == "left" else ("Derecha" if align == "right" else "Justificada"))
+            align_str_raw = self._align_display(align)
             bold_str_raw = "Negrita" if is_bold else "Normal"
             case_str_raw = "Mayúsculas" if is_uppercase else "Minúsculas"
 
@@ -163,6 +161,7 @@ class IndiceGeneralAuditor(BaseAuditor):
             #   → SIN relleno de puntos NI número de página visible
             # Desde RESUMEN en adelante:
             #   → CON relleno de puntos Y número de página
+            #   → EXCEPTO títulos de capítulos (centrados, sin relleno)
             preliminares_sin_numero = [
                 'DEDICATORIA', 'AGRADECIMIENTO', 'AGRADECIMIENTOS',
                 'ÍNDICE GENERAL', 'INDICE GENERAL',
@@ -171,10 +170,14 @@ class IndiceGeneralAuditor(BaseAuditor):
                 'ÍNDICE DE ACRÓNIMOS', 'INDICE DE ACRONIMOS',
                 'ÍNDICE DE ANEXOS', 'INDICE DE ANEXOS',
                 'ACRÓNIMOS', 'ACRONIMOS',
-                'RESUMEN', 'ABSTRACT'
             ]
-            # Secciones con relleno obligatorio (RESUMEN en adelante)
-            con_relleno_obligatorio = []
+            # Secciones con relleno obligatorio (desde RESUMEN en adelante)
+            con_relleno_obligatorio = [
+                'RESUMEN', 'ABSTRACT',
+                'CONCLUSIONES', 'RECOMENDACIONES',
+                'REFERENCIAS BIBLIOGRAFICAS', 'REFERENCIAS BIBLIOGRÁFICAS',
+                'ANEXOS',
+            ]
             is_preliminar = any(upper.strip() == ps for ps in preliminares_sin_numero)
             requiere_relleno = any(upper.strip() == cr for cr in con_relleno_obligatorio)
 
@@ -292,13 +295,19 @@ class IndiceGeneralAuditor(BaseAuditor):
                 num_part = hierarchy_match.group(1)
                 dots_count = num_part.count('.')
 
+                # Sangría francesa esperada por nivel
+                expected_hanging = {2: 1.25, 3: 1.25, 4: 1.5, 5: 1.5}.get(dots_count + 1, 0)
+                expected_indent_left = {2: 0.0, 3: 1.25, 4: 2.5, 5: 2.5}.get(dots_count + 1, 0)
+
                 if dots_count == 1:
-                    # NIVEL 2: Justificada o Izquierda, Negrita, Mayúsculas
-                    ok_align = align in ['both', 'justify', 'left']
+                    # NIVEL 2: Justificada, Sangría Izq 0cm, Francesa 1.25cm, Negrita, Mayúsculas
+                    ok_align = align == 'both'
                     ok_bold = is_bold
                     ok_case = is_uppercase
+                    ok_indent_left = abs(indent_left_cm - 0.0) < 0.1
+                    ok_hanging = abs(indent_hanging_cm - 1.25) < 0.15
 
-                    passed = ok_align and ok_bold and ok_case
+                    passed = ok_align and ok_bold and ok_case and ok_indent_left and ok_hanging
                     if passed:
                         expected_str = "Correcto"
                         actual_str = "Correcto"
@@ -306,7 +315,7 @@ class IndiceGeneralAuditor(BaseAuditor):
                         req_list = []
                         act_list = []
                         if not ok_align:
-                            req_list.append("Justificada o Izquierda")
+                            req_list.append("Justificada")
                             act_list.append(align_str_raw)
                         if not ok_bold:
                             req_list.append("Negrita")
@@ -314,20 +323,28 @@ class IndiceGeneralAuditor(BaseAuditor):
                         if not ok_case:
                             req_list.append("Mayúsculas")
                             act_list.append(case_str_raw)
+                        if not ok_indent_left:
+                            req_list.append("Sangría Izq 0cm")
+                            act_list.append(f"Izq {indent_left_cm}cm")
+                        if not ok_hanging:
+                            req_list.append("Francesa 1.25cm")
+                            act_list.append(f"Francesa {indent_hanging_cm}cm")
                         expected_str = ", ".join(req_list)
                         actual_str = ", ".join(act_list)
 
                     self._add("Índice General", f"Formato Nivel 2: {txt[:20]}...", "passed" if passed else "error",
-                              f"El título de Nivel 2 '{txt[:20]}...' en el índice debe estar JUSTIFICADO o ALINEADO A LA IZQUIERDA, en NEGRITA y en MAYÚSCULAS.",
+                              f"El título de Nivel 2 '{txt[:20]}...' en el índice debe estar JUSTIFICADO, en NEGRITA, MAYÚSCULAS, sangría izquierda 0cm y sangría francesa 1.25cm.",
                               expected_str, actual_str, p_idx=p['index'], p_text=txt)
 
                 elif dots_count == 2:
-                    # NIVEL 3: Justificada o Izquierda, SIN negrita, Minúsculas
-                    ok_align = align in ['both', 'justify', 'left']
+                    # NIVEL 3: Justificada, Sangría Izq 1.25cm, Francesa 1.25cm, SIN negrita, Minúsculas
+                    ok_align = align == 'both'
                     ok_bold = not is_bold
                     ok_case = not is_uppercase
+                    ok_indent_left = abs(indent_left_cm - 1.25) < 0.15
+                    ok_hanging = abs(indent_hanging_cm - 1.25) < 0.15
 
-                    passed = ok_align and ok_bold and ok_case
+                    passed = ok_align and ok_bold and ok_case and ok_indent_left and ok_hanging
                     if passed:
                         expected_str = "Correcto"
                         actual_str = "Correcto"
@@ -335,7 +352,7 @@ class IndiceGeneralAuditor(BaseAuditor):
                         req_list = []
                         act_list = []
                         if not ok_align:
-                            req_list.append("Justificada o Izquierda")
+                            req_list.append("Justificada")
                             act_list.append(align_str_raw)
                         if not ok_bold:
                             req_list.append("Normal (sin negrita)")
@@ -343,20 +360,28 @@ class IndiceGeneralAuditor(BaseAuditor):
                         if not ok_case:
                             req_list.append("Minúsculas")
                             act_list.append(case_str_raw)
+                        if not ok_indent_left:
+                            req_list.append("Sangría Izq 1.25cm")
+                            act_list.append(f"Izq {indent_left_cm}cm")
+                        if not ok_hanging:
+                            req_list.append("Francesa 1.25cm")
+                            act_list.append(f"Francesa {indent_hanging_cm}cm")
                         expected_str = ", ".join(req_list)
                         actual_str = ", ".join(act_list)
 
                     self._add("Índice General", f"Formato Nivel 3: {txt[:20]}...", "passed" if passed else "error",
-                              f"El título de nivel 3 y 4 en el índice no debe estar en Negrita. El título de Nivel 3 '{txt[:20]}...' en el índice debe estar JUSTIFICADO o ALINEADO A LA IZQUIERDA, sin negrita (NORMAL) y en MINÚSCULAS.",
+                              f"El título de Nivel 3 '{txt[:20]}...' en el índice debe estar JUSTIFICADO, sin negrita, MINÚSCULAS, sangría izquierda 1.25cm y sangría francesa 1.25cm.",
                               expected_str, actual_str, p_idx=p['index'], p_text=txt)
 
                 else:
-                    # NIVEL 4/5: Justificada o Izquierda, SIN negrita, Minúsculas
-                    ok_align = align in ['both', 'justify', 'left']
+                    # NIVEL 4/5: Justificada, Sangría Izq 2.5cm, Francesa 1.5cm, SIN negrita, Minúsculas
+                    ok_align = align == 'both'
                     ok_bold = not is_bold
                     ok_case = not is_uppercase
+                    ok_indent_left = abs(indent_left_cm - 2.5) < 0.2
+                    ok_hanging = abs(indent_hanging_cm - 1.5) < 0.2
 
-                    passed = ok_align and ok_bold and ok_case
+                    passed = ok_align and ok_bold and ok_case and ok_indent_left and ok_hanging
                     if passed:
                         expected_str = "Correcto"
                         actual_str = "Correcto"
@@ -364,7 +389,7 @@ class IndiceGeneralAuditor(BaseAuditor):
                         req_list = []
                         act_list = []
                         if not ok_align:
-                            req_list.append("Justificada o Izquierda")
+                            req_list.append("Justificada")
                             act_list.append(align_str_raw)
                         if not ok_bold:
                             req_list.append("Normal (sin negrita)")
@@ -372,11 +397,17 @@ class IndiceGeneralAuditor(BaseAuditor):
                         if not ok_case:
                             req_list.append("Minúsculas")
                             act_list.append(case_str_raw)
+                        if not ok_indent_left:
+                            req_list.append("Sangría Izq 2.5cm")
+                            act_list.append(f"Izq {indent_left_cm}cm")
+                        if not ok_hanging:
+                            req_list.append("Francesa 1.5cm")
+                            act_list.append(f"Francesa {indent_hanging_cm}cm")
                         expected_str = ", ".join(req_list)
                         actual_str = ", ".join(act_list)
 
                     self._add("Índice General", f"Formato Nivel 4/5: {txt[:20]}...", "passed" if passed else "error",
-                              f"El título de nivel 3 y 4 en el índice no debe estar en Negrita. El título de Nivel 4/5 '{txt[:20]}...' en el índice debe estar JUSTIFICADO o ALINEADO A LA IZQUIERDA, sin negrita (NORMAL) y en MINÚSCULAS.",
+                              f"El título de Nivel 4/5 '{txt[:20]}...' en el índice debe estar JUSTIFICADO, sin negrita, MINÚSCULAS, sangría izquierda 2.5cm y sangría francesa 1.5cm.",
                               expected_str, actual_str, p_idx=p['index'], p_text=txt)
             else:
                 # ═══ DETECTAR LÍNEAS HUÉRFANAS EN EL ÍNDICE ═══
@@ -444,11 +475,13 @@ class IndiceGeneralAuditor(BaseAuditor):
                     continue
 
                 # ═══ NIVEL 1 LEGÍTIMO (RESUMEN, ANEXOS, etc.) ═══
-                ok_align = align in ['both', 'justify', 'left']
+                ok_align = align in ['left', 'both', 'justify']
                 ok_bold = is_bold
                 ok_case = is_uppercase
+                ok_indent_left = abs(indent_left_cm - 0.0) < 0.1
+                ok_hanging = abs(indent_hanging_cm - 0.0) < 0.1
 
-                passed = ok_align and ok_bold and ok_case
+                passed = ok_align and ok_bold and ok_case and ok_indent_left and ok_hanging
                 if passed:
                     expected_str = "Correcto"
                     actual_str = "Correcto"
@@ -456,7 +489,7 @@ class IndiceGeneralAuditor(BaseAuditor):
                     req_list = []
                     act_list = []
                     if not ok_align:
-                        req_list.append("Justificada o Izquierda")
+                        req_list.append("Justificada")
                         act_list.append(align_str_raw)
                     if not ok_bold:
                         req_list.append("Negrita")
@@ -464,11 +497,17 @@ class IndiceGeneralAuditor(BaseAuditor):
                     if not ok_case:
                         req_list.append("Mayúsculas")
                         act_list.append(case_str_raw)
+                    if not ok_indent_left:
+                        req_list.append("Sin sangría izq")
+                        act_list.append(f"Izq {indent_left_cm}cm")
+                    if not ok_hanging:
+                        req_list.append("Sin francesa")
+                        act_list.append(f"Francesa {indent_hanging_cm}cm")
                     expected_str = ", ".join(req_list)
                     actual_str = ", ".join(act_list)
 
                 self._add("Índice General", f"Formato Nivel 1: {txt[:20]}...", "passed" if passed else "error",
-                          f"El título de Nivel 1 '{txt[:20]}...' en el índice debe estar JUSTIFICADO o ALINEADO A LA IZQUIERDA, en NEGRITA y en MAYÚSCULAS.",
+                          f"El título de Nivel 1 '{txt[:20]}...' en el índice debe estar JUSTIFICADO, en NEGRITA, MAYÚSCULAS y sin sangría de ningún tipo.",
                           expected_str, actual_str, p_idx=p['index'], p_text=txt)
 
         # Validar la presencia de hipervínculos en las entradas del índice general
@@ -521,7 +560,7 @@ class IndiceGeneralAuditor(BaseAuditor):
             is_bold = any(r.get('bold') for r in p.get('runs', []))
             is_italic = any(r.get('italic') for r in p.get('runs', []))
             align = p.get('alignment', 'left')
-            align_str = "Centrado" if align == "center" else ("Izquierda" if align == "left" else ("Derecha" if align == "right" else "Justificada"))
+            align_str = self._align_display(align)
 
             indent_left_cm = round(p.get('indent_left') or 0, 2)
             indent_first_cm = round(p.get('indent_first') or 0, 2)
@@ -631,23 +670,4 @@ class IndiceGeneralAuditor(BaseAuditor):
             idx_end = min(idx_start + 300, len(self.paragraphs))
         return idx_start, idx_end
 
-    def _build_body_headings_map(self, start_body_search):
-        body_headings = {}
-        for idx_b in range(start_body_search, len(self.paragraphs)):
-            p_b = self.paragraphs[idx_b]
-            txt_b = p_b['text'].strip()
-            if not txt_b:
-                continue
 
-            norm_b = self._norm_alphanumeric(txt_b)
-            is_head = p_b.get('is_heading', False)
-            first_run_size = p_b['runs'][0].get('size', 0) if p_b.get('runs') else 0
-            is_section_keyword = self._norm(txt_b) in [
-                "RESUMEN", "ABSTRACT", "INTRODUCCION", "INTRODUCCIÓN",
-                "CONCLUSIONES", "RECOMENDACIONES", "REFERENCIAS BIBLIOGRAFICAS", "ANEXOS"
-            ]
-
-            if is_head or first_run_size >= 12 or is_section_keyword:
-                if norm_b and norm_b not in body_headings:
-                    body_headings[norm_b] = p_b.get('estimated_page', 1)
-        return body_headings

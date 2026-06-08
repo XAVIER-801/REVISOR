@@ -123,7 +123,7 @@ class CapituloNivel345Auditor(BaseAuditor):
                 if align not in ['both', 'justify', 'left']:
                     self._add("Jerarquía", f"Alineación Título {level_label}", "error",
                               f"El título de {level_label.lower()} debe tener alineación justificada o a la izquierda.",
-                              "Justificada o Izquierda", align, p_idx=p['index'], p_text=txt)
+                              "Justificada o Izquierda", self._align_display(align), p_idx=p['index'], p_text=txt)
 
                 # Interlineado
                 line_spacing = p.get('line_spacing')
@@ -215,10 +215,10 @@ class CapituloNivel345Auditor(BaseAuditor):
                           f"El contenido bajo {level_label.lower()} debe estar en estilo Normal (Sin Negrita).",
                           "Normal (Sin Negrita)", "Negrita", p_idx=p['index'], p_text=txt[:40])
 
-            if align not in ['both', 'justify']:
+            if align != 'both':
                 self._add("Estructura", f"Alineación Contenido ({level_label})", "error",
                           f"El contenido bajo {level_label.lower()} debe tener alineación justificada.",
-                          "Justificada", align, p_idx=p['index'], p_text=txt[:40])
+                          "Justificada", self._align_display(align), p_idx=p['index'], p_text=txt[:40])
 
             line_spacing = p.get('line_spacing')
             if line_spacing is not None and abs(line_spacing - 2.0) > 0.2:

@@ -51,6 +51,16 @@ class BaseAuditor:
         return getattr(self.engine, 'index_start_idx', -1)
 
     # ── Métodos compartidos ──────────────────────────────────────────────
+    @staticmethod
+    def _align_display(align):
+        names = {
+            'left': 'left (Izquierda)',
+            'center': 'center (Centrado)',
+            'right': 'right (Derecha)',
+            'both': 'both (Justificado)',
+        }
+        return names.get(align, str(align))
+
     def _add(self, cat, rule, status, msg, expected="", actual="", p_idx=None, p_text="", page=None, section=None):
         """Registra una observación de auditoría en el engine principal."""
         self.engine._add(cat, rule, status, msg, expected, actual, p_idx, p_text, page, section)

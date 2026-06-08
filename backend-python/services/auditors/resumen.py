@@ -100,7 +100,7 @@ class ResumenAuditor(BaseAuditor):
         if align != "center":
             self._add("Resumen y Abstract", "Alineación Título RESUMEN", "error",
                       "El título 'RESUMEN' debe estar centrado.",
-                      "Centrado", align, p_idx=idx, p_text=txt)
+                      "Centrado", self._align_display(align), p_idx=idx, p_text=txt)
 
         if not bold:
             self._add("Resumen y Abstract", "Negrita Título RESUMEN", "error",
@@ -147,10 +147,10 @@ class ResumenAuditor(BaseAuditor):
                       "El contenido del resumen debe ser de 12pt.",
                       "12pt", f"{size}pt", p_idx=idx, p_text=txt[:40])
 
-        if align not in ("both", "justify"):
+        if align != 'both':
             self._add("Resumen y Abstract", "Alineación Contenido Resumen", "error",
                       "El contenido del resumen debe estar justificado.",
-                      "Justificada", align, p_idx=idx, p_text=txt[:40])
+                      "Justificada", self._align_display(align), p_idx=idx, p_text=txt[:40])
 
         if line_spacing and abs(line_spacing - 2.0) > 0.2:
             self._add("Resumen y Abstract", "Interlineado Contenido Resumen", "error",
@@ -209,9 +209,21 @@ class ResumenAuditor(BaseAuditor):
 
         # 3. Extraer lista de palabras clave después de ":"
         if ":" in txt:
-            keywords_part = txt.split(":", 1)[1].strip()
-            # Quitar punto final si existe
-            keywords_part = keywords_part.rstrip(".")
+            keywords_part_raw = txt.split(":", 1)[1].strip()
+            # Validar punto final obligatorio
+            if not keywords_part_raw.endswith("."):
+                self._add(
+                    "Resumen y Abstract",
+                    "Punto Final Palabras Clave",
+                    "error",
+                    "La lista de palabras clave debe terminar con un punto (.) al final.",
+                    "Terminar con punto",
+                    "Sin punto final",
+                    p_idx=idx,
+                    p_text=txt,
+                )
+
+            keywords_part = keywords_part_raw.rstrip(".")
             keywords = [k.strip() for k in keywords_part.split(",") if k.strip()]
 
             # Validar que esté separado por comas (mínimo 2 palabras)
@@ -229,21 +241,42 @@ class ResumenAuditor(BaseAuditor):
                 )
                 return
 
-            # 4. Validar primera letra MAYÚSCULA, resto minúsculas en cada palabra
+            # 4. Validar MAYÚSCULA inicial y minúsculas en el resto
+            bad_first = []   # primera letra no es mayúscula
+            bad_rest = []    # resto no es minúscula
             for kw in keywords:
                 if not kw:
                     continue
                 if not kw[0].isupper():
-                    self._add(
-                        "Resumen y Abstract",
-                        f"Capitalización palabra clave: {kw[:20]}",
-                        "warning",
-                        "Cada palabra clave debe iniciar con MAYÚSCULA y continuar en minúsculas.",
-                        "Mayúscula inicial",
-                        kw,
-                        p_idx=idx,
-                        p_text=txt,
-                    )
+                    bad_first.append(kw)
+                elif len(kw) > 1 and not kw[1:].islower():
+                    bad_rest.append(kw)
+
+            if bad_first:
+                self._add(
+                    "Resumen y Abstract",
+                    "Capitalización Palabras Clave",
+                    "warning",
+                    f"Las siguientes palabras clave deben iniciar con MAYÚSCULA: "
+                    f"{' | '.join(bad_first[:5])}{'...' if len(bad_first) > 5 else ''}.",
+                    "Mayúscula inicial",
+                    f"{len(bad_first)} palabra(s) sin mayúscula inicial",
+                    p_idx=idx,
+                    p_text=txt,
+                )
+
+            if bad_rest:
+                self._add(
+                    "Resumen y Abstract",
+                    "Minúsculas en Palabras Clave",
+                    "warning",
+                    f"Solo la primera letra debe ser mayúscula; el resto en minúsculas: "
+                    f"{' | '.join(bad_rest[:5])}{'...' if len(bad_rest) > 5 else ''}.",
+                    "Resto en minúsculas",
+                    f"{len(bad_rest)} palabra(s) con mayúsculas internas",
+                    p_idx=idx,
+                    p_text=txt,
+                )
 
             # 5. Validar ORDEN ALFABÉTICO
             sorted_kw = sorted(keywords, key=lambda x: x.lower())

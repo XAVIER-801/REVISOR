@@ -73,9 +73,18 @@ class TablasAuditor(BaseAuditor):
                 continue
 
             if is_table_label:
-                label_match = re.match(r'^(Tabla\s+\d+\.?\s*)(.*)', txt, re.IGNORECASE)
-                label_text = label_match.group(1).strip() if label_match else txt
+                label_match = re.match(r'^(Tabla\s+\d+)\.?\s*(.*)', txt, re.IGNORECASE)
+                raw_label = label_match.group(1).strip() if label_match else txt
+                label_text = raw_label.rstrip('.')
                 title_in_same_para = label_match.group(2).strip() if label_match else ""
+
+                # Flag si el label tiene punto (debe ser sin punto)
+                if raw_label.endswith('.'):
+                    self._add("Tablas", f"Etiqueta con punto: {label_text}", "error",
+                              "La etiqueta de Tabla NO debe llevar punto después del número. "
+                              "Ej: 'Tabla 4' (correcto) en vez de 'Tabla 4.' (incorrecto).",
+                              "Tabla X (sin punto)", f"{raw_label} (con punto)",
+                              p_idx=p['index'], p_text=txt)
 
                 # NUEVO: Validar tamaño de fuente (DEBE ser 12pt)
                 # NOTA: style_resolver ya retorna size en puntos enteros (NO half-points)
@@ -110,15 +119,15 @@ class TablasAuditor(BaseAuditor):
                 # 1. Alineación y Sangría
                 if align != 'left' and align != 'both':
                     self._add("Tablas", f"Alineación Etiqueta: {label_text}", "error",
-                             "La etiqueta de Tabla debe estar alineada a la Izquierda.", "Izquierda", align, p_idx=p['index'], p_text=txt)
+                             "La etiqueta de Tabla debe estar alineada a la Izquierda.", "Izquierda", self._align_display(align), p_idx=p['index'], p_text=txt)
 
                 if abs(l_cm - exp_l_cm) > 0.1:
                     self._add("Tablas", f"Sangría Etiqueta: {label_text}", "warning",
                              f"La etiqueta de Tabla debe tener la misma sangría que el título de Nivel {level} ({exp_l_cm}cm).",
                              f"Izq {exp_l_cm}cm", f"Izq {l_cm}cm", p_idx=p['index'], p_text=txt)
 
-                # 2. Estilo (Negrita)
-                is_bold = any(r.get('bold') for r in p.get('runs', []))
+                # 2. Estilo (Negrita) — usar umbral 0.5 (mayoría de caracteres)
+                is_bold = self._is_meaningfully_bold(p, threshold=0.5)
                 if not is_bold:
                     self._add("Tablas", f"Estilo Etiqueta: {label_text}", "error",
                              "Las etiquetas de Tabla deben estar en Negrita.", "Negrita", "Normal", p_idx=p['index'], p_text=txt)
@@ -173,10 +182,7 @@ class TablasAuditor(BaseAuditor):
                             is_italic = any(r.get('italic') for r in next_p.get('runs', []))
                             is_next_bold = any(r.get('bold') for r in next_p.get('runs', []))
                             n_align = next_p.get('alignment', 'left')
-                            if (next_p.get('indent_left') or 0) > 10:
-                                n_l_cm = round(next_p.get('indent_left') / 567.0, 2)
-                            else:
-                                n_l_cm = round(next_p.get('indent_left') or 0, 2)
+                            n_l_cm = round(next_p.get('indent_left') or 0, 2)
 
                             if (not is_italic) or is_next_bold:
                                 req_list = []
@@ -221,7 +227,7 @@ class TablasAuditor(BaseAuditor):
 
                             if n_align != 'left' and n_align != 'both':
                                 self._add("Tablas", f"Alineación Título: {next_p['text'][:20]}...", "error",
-                                         "El título descriptivo de la Tabla debe estar alineado a la Izquierda.", "Izquierda", n_align, p_idx=next_p['index'], p_text=next_p['text'])
+                                          "El título descriptivo de la Tabla debe estar alineado a la Izquierda.", "Izquierda", self._align_display(n_align), p_idx=next_p['index'], p_text=next_p['text'])
 
                             if abs(n_l_cm - exp_l_cm) > 0.1:
                                 next_level = next_p.get('body_level') or next_p.get('level') or 1
@@ -253,7 +259,8 @@ class TablasAuditor(BaseAuditor):
                              "Nota: o Fuente: debajo", "Ausente", p_idx=p['index'], p_text=txt)
 
             # 4. Detectar "Nota" o "Fuente" y verificar formato (Solo si corresponde a una tabla previa)
-            if upper.startswith("NOTA") or upper.startswith("FUENTE"):
+            first_word = txt.split(' ', 1)[0].upper().rstrip(':')
+            if first_word in ("NOTA", "FUENTE"):
                 # Verificar si el elemento previo más cercano con etiqueta era Tabla o Figura
                 es_de_tabla = True
                 for k in range(i - 1, max(-1, i - 150), -1):

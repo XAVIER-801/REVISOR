@@ -131,7 +131,7 @@ class DeclaracionAutenticidadAuditor(BaseAuditor):
                 "error",
                 "El título de la Declaración Jurada debe estar alineado a la izquierda.",
                 "Izquierda",
-                align,
+                self._align_display(align),
                 p_idx=idx,
                 p_text=txt,
             )
