@@ -65,7 +65,7 @@ from services.auditors.espaciado_titulos_contenido import EspaciadoTitulosConten
 from services.auditors.secuencia_tabla_figura import SecuenciaTablaFiguraAuditor
 
 # Palabras aproximadas por página en formato tesis
-_WORDS_PER_PAGE = 350
+_WORDS_PER_PAGE = 250
 
 SECTION_KEYWORDS = [
     "DEDICATORIA", "AGRADECIMIENTOS", "INDICE GENERAL",
@@ -73,7 +73,7 @@ SECTION_KEYWORDS = [
     "INDICE DE ANEXOS", "INDICE DE GRAFICOS", "INDICE", "CONTENIDO", "TABLA DE MATERIAS",
     "TABLA DE CONTENIDOS", "TABLA DE CONTENIDO",
     "RESUMEN", "ABSTRACT", "INTRODUCCION", "CONCLUSIONES", "RECOMENDACIONES",
-    "REFERENCIAS BIBLIOGRAFICAS", "ANEXOS", "DECLARACION JURADA", "AUTORIZACION PARA EL DEPOSITO",
+    "REFERENCIAS", "REFERENCIAS BIBLIOGRAFICAS", "ANEXOS", "DECLARACION JURADA", "AUTORIZACION PARA EL DEPOSITO",
     "ACRONIMOS", "ACRÓNIMOS"
 ]
 
@@ -188,9 +188,12 @@ class WordAuditEngine:
         # Solo se considera activa si lnNumType tiene countBy >= 1.
         # Muchos documentos Word tienen lnNumType residual de plantillas
         # con countBy="0" o sin atributos → no es numeración visible real.
+        # Almacena información por sección incluyendo w:pos (posición del número:
+        # "left", "right", "outside", "inside").
         self.has_line_numbering = False
+        self.line_numbering_sections = []
         sectPr_elements = root.findall('.//w:sectPr', NSMAP)
-        for sectPr in sectPr_elements:
+        for sect_idx, sectPr in enumerate(sectPr_elements):
             lnNumType = sectPr.find('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}lnNumType', NSMAP)
             if lnNumType is None:
                 lnNumType = sectPr.find('w:lnNumType', NSMAP)
@@ -199,17 +202,24 @@ class WordAuditEngine:
                 if count_by is None:
                     count_by = lnNumType.get('countBy')
                 if count_by is None:
-                    # En OOXML, si lnNumType está presente y countBy se omite, el valor por defecto es 1 (activo)
-                    self.has_line_numbering = True
-                    break
+                    count_by_val = 1
                 else:
                     try:
                         count_by_val = int(count_by)
                     except (ValueError, TypeError):
                         count_by_val = 0
-                    if count_by_val >= 1:
-                        self.has_line_numbering = True
-                        break
+
+                if count_by_val >= 1:
+                    self.has_line_numbering = True
+                    w_ns = NSMAP["w"]
+                    pos = lnNumType.get(f'{{{w_ns}}}pos')
+                    if pos is None:
+                        pos = "left"
+                    self.line_numbering_sections.append({
+                        "section_idx": sect_idx,
+                        "countBy": count_by_val,
+                        "pos": pos,
+                    })
 
         # ── Parsear numbering.xml para mapear numId e ilvl a sus formatos de viñeta ──
         bullet_definitions = {}
@@ -260,6 +270,7 @@ class WordAuditEngine:
         in_index_zone = False
 
         table_eq_cache = {}
+        table_style_cache = {}  # tbl_id → {'style_id': str, 'first_row_bold': bool}
 
         # ── ANÁLISIS PROFUNDO DE TABLAS ──
         # Por cada tabla del documento, capturamos:
@@ -274,6 +285,8 @@ class WordAuditEngine:
         # header_rows_by_tbl[tbl_id] = set de IDs de filas (w:tr) que son
         # encabezado (primera fila lógica o filas marcadas con <w:tblHeader/>)
         self.header_rows_by_tbl = {}
+        # row_index_by_tr_id[tbl_id][tr_xml_id] = row_index (0-based) dentro de la tabla
+        self.row_index_by_tr_id = {}
         # vmerge_continuation_cells[tbl_id] = set de IDs de celdas que son
         # continuación de un vMerge cuyo restart está en una fila de header
         self.vmerge_header_cells = {}
@@ -285,10 +298,26 @@ class WordAuditEngine:
             tbl_id = id(tbl_el)
             tbl_pr = tbl_el.find('w:tblPr', NSMAP)
             jc_val = "left"
+            has_horizontal_borders = False
             if tbl_pr is not None:
                 jc_el = tbl_pr.find('w:jc', NSMAP)
                 if jc_el is not None:
                     jc_val = jc_el.get(f'{{{NSMAP["w"]}}}val') or "left"
+                # Detectar bordes horizontales (insideH + top + bottom)
+                borders_el = tbl_pr.find('w:tblBorders', NSMAP)
+                if borders_el is not None:
+                    insideH = borders_el.find('w:insideH', NSMAP)
+                    top = borders_el.find('w:top', NSMAP)
+                    bottom = borders_el.find('w:bottom', NSMAP)
+                    if insideH is not None and top is not None and bottom is not None:
+                        hv = insideH.get(f'{{{NSMAP["w"]}}}val')
+                        tv = top.get(f'{{{NSMAP["w"]}}}val')
+                        bv = bottom.get(f'{{{NSMAP["w"]}}}val')
+                        has_horizontal_borders = (
+                            hv and hv not in ('none', 'nil')
+                            and tv and tv not in ('none', 'nil')
+                            and bv and bv not in ('none', 'nil')
+                        )
 
             rows = list(tbl_el.iter(w_tr_tag))
             if not rows:
@@ -392,11 +421,14 @@ class WordAuditEngine:
                 if r_idx not in header_row_indices:
                     header_row_indices.append(r_idx)
 
-            # ── Heurística para encabezados multi-fila con gridSpan (sin vMerge) ──
+            # ── Heurística para encabezados multi-fila con gridSpan ──
             # Caso típico: fila 1 tiene 1-2 celdas con gridSpan grande (título general),
             # fila 2 tiene las sub-categorías, fila 3 tiene sub-sub-categorías.
             # Todas son visualmente encabezado.
-            if len(rows) >= 3 and not explicit_header_rows:
+            # Se ejecuta incluso si hay explicit_header_rows, porque Word a veces
+            # solo marca la primera fila con tblHeader pero el header visual tiene
+            # varias filas con celdas combinadas.
+            if len(rows) >= 3:
                 # Contar celdas reales (sin contar gridSpan) por fila
                 def _count_cells(row_el):
                     return len(row_el.findall('w:tc', NSMAP))
@@ -448,6 +480,9 @@ class WordAuditEngine:
             header_row_ids = {id(rows[i]) for i in header_row_indices}
             self.header_rows_by_tbl[tbl_id] = header_row_ids
 
+            # Índice de fila por ID de elemento XML (para exportar a auditor)
+            self.row_index_by_tr_id[tbl_id] = {id(tr): r_idx for r_idx, tr in enumerate(rows)}
+
             self.vmerge_header_cells[tbl_id] = vmerge_header_cell_ids
 
             # ── La tabla cruza páginas ──
@@ -467,6 +502,7 @@ class WordAuditEngine:
                 "explicit_header_rows": explicit_header_rows,
                 "has_merged_cells": len(vmerge_header_cell_ids) > 0 or len(header_columns_with_vmerge) > 0,
                 "crosses_pages": crosses_pages,
+                "has_horizontal_borders": has_horizontal_borders,
                 "first_cell_text": first_cell_text,
             }
 
@@ -499,6 +535,11 @@ class WordAuditEngine:
         fld_stack = []
         is_in_toc = False
 
+        # Rastrear a qué sección pertenece cada párrafo
+        # sectPr marca el FINAL de una sección; la siguiente inicia en el próximo párrafo
+        current_section_idx = 0
+        section_of_paragraph = []
+
         for idx, p_el in enumerate(body.iter(f'{{{NSMAP["w"]}}}p')):
             # Detectar límites de campos (especialmente TOC)
             fld_chars = p_el.xpath('.//w:fldChar', namespaces=NSMAP)
@@ -523,6 +564,13 @@ class WordAuditEngine:
                         break
 
             ppr_el = p_el.find('w:pPr', NSMAP)
+            # Registrar a qué sección pertenece este párrafo
+            section_of_paragraph.append(current_section_idx)
+            # sectPr dentro de pPr marca el FIN de la sección actual;
+            # el siguiente párrafo iniciará la siguiente sección
+            if ppr_el is not None and ppr_el.find('w:sectPr', NSMAP) is not None:
+                current_section_idx += 1
+
             explicit_ppr = parse_ppr(ppr_el)
             style_id = explicit_ppr.get('style_id', 'Normal')
             res_ppr, _ = self.resolver.resolve(style_id, explicit_ppr)
@@ -603,11 +651,17 @@ class WordAuditEngine:
 
             txt = ""
             runs = []
+            # Extraer propiedades de run a nivel de párrafo (w:pPr/w:rPr) como
+            # fallback. En Word, el formato Negrita/Cursiva puede heredarse del
+            # estilo de párrafo o de la celda de tabla (w:tcPr/w:rPr).
+            pp_run_rpr = parse_rpr(ppr_el.find('w:rPr', NSMAP)) if ppr_el is not None else {}
             for r_el in p_el.findall('.//w:r', NSMAP):
                 t = "".join([t.text for t in r_el.findall('w:t', NSMAP) if t.text])
                 txt += t
                 explicit_rpr = parse_rpr(r_el.find('w:rPr', NSMAP))
-                _, res_rpr = self.resolver.resolve(style_id, explicit_ppr, explicit_rpr)
+                # Merge: paragraph-level rPr como base, run-level rPr anula
+                combined_explicit_rpr = {**pp_run_rpr, **explicit_rpr}
+                _, res_rpr = self.resolver.resolve(style_id, explicit_ppr, combined_explicit_rpr)
                 runs.append({
                     "bold": res_rpr.get('bold', False), 
                     "italic": res_rpr.get('italic', False),
@@ -618,26 +672,6 @@ class WordAuditEngine:
 
             word_count = len(txt.split()) if txt.strip() else 0
             accumulated_words += word_count
-
-            # ── ESTIMACIÓN DE PÁGINA MEJORADA ──
-            # Prioridad 1: lastRenderedPageBreak (marca REAL de Word del último renderizado)
-            # Prioridad 2: <w:br type="page"/> (salto manual de página)
-            # Prioridad 3: estimación por palabras (~350 por página)
-            if has_real_page_marker:
-                # Marca real → página exacta (Word renderizó aquí un salto)
-                current_page += 1
-                page_words = word_count
-            elif has_page_break:
-                current_page += 1
-                page_words = word_count
-            else:
-                page_words += word_count
-                if page_words >= _WORDS_PER_PAGE:
-                    pages_to_add = page_words // _WORDS_PER_PAGE
-                    current_page += pages_to_add
-                    page_words = page_words % _WORDS_PER_PAGE
-
-            estimated_page = current_page
 
             # Detectar si este párrafo inicia una sección conocida
             norm_txt = self._norm(txt)
@@ -663,6 +697,7 @@ class WordAuditEngine:
                 in_index_zone = False
 
             # Uso de fuzzy matching para identificar secciones (incluso con errores de tipeo)
+            prev_section = current_section
             if not is_index_line:
                 matched_kw = self._fuzzy_match(norm_txt, SECTION_KEYWORDS)
                 if matched_kw:
@@ -686,6 +721,7 @@ class WordAuditEngine:
             in_table = False
             is_table_header = False
             tbl_id_ref = None  # ID de la tabla a la que pertenece este párrafo
+            p_row = None  # Elemento XML de la fila actual (para row_index)
             w_tbl = f"{{{NSMAP['w']}}}tbl"
             w_tr = f"{{{NSMAP['w']}}}tr"
             w_tc = f"{{{NSMAP['w']}}}tc"
@@ -749,6 +785,49 @@ class WordAuditEngine:
                                 if p_row == first_row:
                                     is_table_header = True
 
+                    # ═══ RESOLVER NEGRITA DESDE ESTILO DE TABLA ═══
+                    # Si la tabla usa un estilo condicional (p.ej., firstRow con
+                    # negrita), Word NO almacena <w:b/> en los runs de las celdas
+                    # del encabezado. Debemos detectarlo desde tblPr/tblStyle.
+                    if is_table_header and tbl is not None:
+                        if id(tbl) not in table_style_cache:
+                            header_bold = False
+                            tbl_pr = tbl.find(f'{{{NSMAP["w"]}}}tblPr', NSMAP)
+                            if tbl_pr is not None:
+                                tbl_style_el = tbl_pr.find(f'{{{NSMAP["w"]}}}tblStyle', NSMAP)
+                                if tbl_style_el is not None:
+                                    style_id = tbl_style_el.get(f'{{{NSMAP["w"]}}}val')
+                                    if style_id and hasattr(self.resolver, 'table_style_map'):
+                                        ts_data = self.resolver.table_style_map.get(style_id)
+                                        if ts_data:
+                                            first_row_rpr = ts_data['rpr_map'].get('firstRow', {})
+                                            if first_row_rpr.get('bold'):
+                                                header_bold = True
+                            table_style_cache[id(tbl)] = {'style_id': style_id, 'first_row_bold': header_bold}
+                        else:
+                            header_bold = table_style_cache[id(tbl)]['first_row_bold']
+                        if header_bold:
+                            for r in runs:
+                                if not r.get('bold'):
+                                    r['bold'] = True
+
+            # ── ESTIMACIÓN DE PÁGINA MEJORADA ──
+            # Basada exclusivamente en word-count con _WORDS_PER_PAGE calibrado
+            # para formato tesis UNAP (doble espacio, 12pt, A4 ≈ 250 palabras/página).
+            #
+            # NOTA: lastRenderedPageBreak NO se usa porque Word lo emite de forma
+            # poco fiable (múltiples marcadores en párrafos consecutivos, dentro
+            # de celdas de tabla, TOC, field codes, etc.), lo que infla artificial-
+            # mente el conteo. La estimación por palabras da resultados más
+            # consistentes incluso con documentos con muchas tablas/figuras.
+            page_words += word_count
+            if page_words >= _WORDS_PER_PAGE:
+                pages_to_add = page_words // _WORDS_PER_PAGE
+                current_page += pages_to_add
+                page_words = page_words % _WORDS_PER_PAGE
+
+            estimated_page = current_page
+
             # Determinar si es un título (manual o automático de Word)
             is_heading = False
             heading_level = None
@@ -780,6 +859,14 @@ class WordAuditEngine:
             if is_heading and heading_level is not None:
                 self.current_level = heading_level
 
+            # Fallback: si es heading no capturado por keyword ni cap_match,
+            # usar su texto como nueva sección. Evita que títulos como
+            # "ANTECEDENTES" hereden la sección anterior (ej. RECOMENDACIONES).
+            if not in_index_zone and is_heading and current_section == prev_section:
+                current_section = txt.strip()
+                if heading_level is not None:
+                    self.current_level = heading_level
+
             # Resolviendo propiedades de lista
             num_id_val = None
             ilvl_val = None
@@ -803,6 +890,12 @@ class WordAuditEngine:
 
             has_hyperlink = (p_el.find('.//w:hyperlink', NSMAP) is not None)
 
+            # Resolver row_index dentro de la tabla
+            row_index = -1
+            if in_table and tbl_id_ref is not None and p_row is not None:
+                row_idx_map = self.row_index_by_tr_id.get(tbl_id_ref, {})
+                row_index = row_idx_map.get(id(p_row), -1)
+
             self.paragraphs.append({
                 "text": txt,
                 "norm": norm_txt,
@@ -820,6 +913,7 @@ class WordAuditEngine:
                 "style_id": style_id,
                 "in_table": in_table,
                 "is_table_header": is_table_header,
+                "row_index": row_index,
                 "level": self.current_level,
                 "is_heading": is_heading,
                 "indent_left": res_ppr.get('indent_left'),
@@ -840,6 +934,13 @@ class WordAuditEngine:
                 "screenshot_drawing": screenshot_drawing,
                 "is_in_toc_field": is_in_toc,
             })
+            self.sections_found.add(current_section)
+
+        # Calcular primer párrafo de cada sección con numeración de línea
+        for ls in self.line_numbering_sections:
+            sec_idx = ls["section_idx"]
+            first_p = next((i for i, s in enumerate(section_of_paragraph) if s == sec_idx), None)
+            ls["first_paragraph_idx"] = first_p
 
         # Identificar la portada (primera página)
         in_cover = True

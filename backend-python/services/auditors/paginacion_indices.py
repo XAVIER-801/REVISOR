@@ -40,13 +40,22 @@ class PaginacionIndicesAuditor(BaseAuditor):
             if bool(re.match(r'^P[ÁA]G\.?:?$', upper)) or "ÍNDICE" in upper:
                 continue
 
-            # Saltar secciones preliminares que NO llevan número de página visible
+            # Saltar secciones preliminares/centradas que NO llevan número de página visible
+            # o cuya página en el índice no debe ser señalada aunque difiera.
             preliminares = [
                 'DEDICATORIA', 'AGRADECIMIENTO', 'AGRADECIMIENTOS',
                 'ACRÓNIMOS', 'ACRONIMOS',
+                'ÍNDICE GENERAL', 'INDICE GENERAL',
+                'ÍNDICE DE TABLAS', 'INDICE DE TABLAS',
+                'ÍNDICE DE FIGURAS', 'INDICE DE FIGURAS',
+                'ÍNDICE DE ANEXOS', 'INDICE DE ANEXOS',
+                'ÍNDICE DE ACRÓNIMOS', 'INDICE DE ACRONIMOS',
             ]
             clean_upper = re.sub(r'[\.\s]+', '', upper).strip()
             if clean_upper in preliminares:
+                continue
+            # Saltar entradas centradas (capítulos I-IV y nombres de capítulo)
+            if p.get('alignment') == 'center':
                 continue
 
             page_match = re.search(r'(\d+)$', txt)

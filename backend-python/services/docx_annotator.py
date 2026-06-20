@@ -57,13 +57,27 @@ class DocxAnnotator:
 
             self._ensure_comments_part()
 
-            # 1. Filtrar solo no-pasados
+            # 1. Extraer regla global de numeración de líneas (no asociada a párrafo)
+            # Se procesa aparte (solo globo, sin resaltado) y se excluye del pipeline normal
+            line_numbering_rule = None
+            remaining = []
+            for r in results:
+                rule = (r.get("rule") or "").upper()
+                rule_norm = rule.replace('Á','A').replace('É','E').replace('Í','I').replace('Ó','O').replace('Ú','U')
+                is_line_rule = "NUMERACION" in rule_norm and "LINEA" in rule_norm
+                if is_line_rule and r.get("status") != "passed":
+                    line_numbering_rule = r
+                    continue
+                remaining.append(r)
+            results = remaining
+
+            # 2. Filtrar solo no-pasados
             failed = [r for r in results if r.get("status") != "passed"]
 
-            # 2. Consolidar repeticiones masivas (mismas reglas consecutivas)
+            # 3. Consolidar repeticiones masivas (mismas reglas consecutivas)
             consolidated = self._consolidate_repeats(failed)
 
-            # 3. AGRUPAR POR PÁRRAFO — todas las observaciones del mismo párrafo
+            # 4. AGRUPAR POR PÁRRAFO — todas las observaciones del mismo párrafo
             # se combinan en UN SOLO comentario para reducir ruido.
             # Esto evita que un mismo párrafo reciba 2-3 comentarios separados
             # (ej: "sin negrita" + "sin tabulación" + "sangría incorrecta").
@@ -82,7 +96,7 @@ class DocxAnnotator:
                 grouped_by_paragraph.setdefault(p_id, []).append(res)
                 target_paragraphs[p_id] = target
 
-            # 4. Ordenar grupos por prioridad: error > warning > observation
+            # 5. Ordenar grupos por prioridad: error > warning > observation
             # El grupo entero hereda la severidad MÁS GRAVE de sus miembros
             def group_priority(items):
                 statuses = [r.get("status") for r in items]
@@ -99,8 +113,9 @@ class DocxAnnotator:
                 key=lambda kv: group_priority(kv[1]),
             )
 
-            # 5. Procesar cada GRUPO de observaciones por párrafo
+            # 6. Procesar cada GRUPO de observaciones por párrafo
             annotated_count = 0
+            tables_marked = set()  # Evita marcar la misma tabla varias veces
             for p_id, observations in sorted_groups:
                 if annotated_count >= MAX_COMMENTS:
                     break
@@ -134,6 +149,19 @@ class DocxAnnotator:
                 )
 
                 try:
+                    # ── Si es un grupo de errores de TABLA, marcar la tabla completa ──
+                    is_table_group = any("TABLAS" in c for c in cats) and self._is_in_table(target)
+                    if is_table_group:
+                        tbl_el = self._get_table_ancestor(target)
+                        if tbl_el is not None:
+                            tbl_key = id(tbl_el)
+                            if tbl_key not in tables_marked:
+                                tables_marked.add(tbl_key)
+                                self._apply_table_level_marker(tbl_el, unique_obs, worst_status)
+                                annotated_count += 1
+                            continue  # Saltar resaltado de celda individual
+
+                    # ── Procesamiento normal (no tabla) ──
                     # Elegir color según severidad más grave
                     if all_ortografia:
                         color = WD_COLOR_INDEX.BRIGHT_GREEN
@@ -157,7 +185,11 @@ class DocxAnnotator:
                 except Exception as e:
                     print(f"Error anotando grupo: {e}")
 
-            # 5. Reporte ejecutivo al inicio
+            # 7. Marcador global de numeración de líneas (solo globo, sin resaltado)
+            if line_numbering_rule is not None:
+                self._apply_global_line_numbering_marker(line_numbering_rule)
+
+            # 8. Reporte ejecutivo al inicio
             self._add_institutional_report(stats, results)
 
             out_name = f"auditado_{os.path.basename(self.original_path)}"
@@ -232,39 +264,123 @@ class DocxAnnotator:
 
     def _apply_global_line_numbering_marker(self, rule_data):
         """
-        Aplica resaltado AZUL CLARO a todos los párrafos del documento para
-        marcar visualmente que la numeración de líneas está activa.
-
-        Usamos AZUL CLARO (BRIGHT_TURQUOISE/CYAN distinguible) en vez de amarillo
-        para que el usuario diferencie claramente este marcador masivo global
-        de los warnings amarillos individuales por párrafo.
-
-        Inserta UN SOLO comentario al inicio del primer párrafo con texto.
+        Inserta UN SOLO comentario globo en el párrafo donde inicia la sección
+        con numeración de líneas activa, y añade una BARRA VERTICAL ROJA al
+        costado izquierdo del párrafo para señalar que el problema está en el
+        MARGEN (números de línea), no en el contenido del texto.
         """
         try:
-            first_target = None
-            for p in self._all_paragraphs:
-                p_text = (getattr(p, '_cached_text', None) or p.text or '').strip()
-                if not p_text:
-                    continue
-                # Resaltado AZUL masivo — distinto de:
-                #   amarillo (warning individual), rojo (error), verde
-                #   (ortografía) y turquesa (observación menor).
-                # Esto evidencia que es un marcador GLOBAL por configuración
-                # del documento, no errores individuales por párrafo.
-                try:
-                    self._apply_highlight(p, WD_COLOR_INDEX.BLUE)
-                except Exception:
-                    pass
-                if first_target is None:
-                    first_target = p
+            p_idx = rule_data.get("paragraphIndex")
+            target = None
+            if p_idx is not None and p_idx < len(self._all_paragraphs):
+                target = self._all_paragraphs[p_idx]
 
-            # Un solo comentario al inicio del primer párrafo con texto
-            if first_target is not None:
-                comment_text = self._build_comment_text(rule_data)
-                self._add_native_comment(first_target, comment_text)
+            if target is None:
+                for p in self._all_paragraphs:
+                    p_text = (getattr(p, '_cached_text', None) or p.text or '').strip()
+                    if p_text:
+                        target = p
+                        break
+
+            if target is not None:
+                # ── Barra vertical roja al costado IZQUIERDO del párrafo ──
+                # Señala visualmente "el problema está en el margen izquierdo"
+                # (donde Word pinta los números de línea). No modifica el texto.
+                pPr = target._element.find(qn('w:pPr'))
+                if pPr is None:
+                    pPr = OxmlElement('w:pPr')
+                    target._element.insert(0, pPr)
+                pBdr = pPr.find(qn('w:pBdr'))
+                if pBdr is None:
+                    pBdr = OxmlElement('w:pBdr')
+                    pPr.append(pBdr)
+                left_border = OxmlElement('w:left')
+                left_border.set(qn('w:val'), 'single')
+                left_border.set(qn('w:sz'), '18')
+                left_border.set(qn('w:space'), '8')
+                left_border.set(qn('w:color'), 'CC0000')
+                pBdr.append(left_border)
+
+                # ── Comentario explícito sobre los números de línea ──
+                comment_text = (
+                    "NUMERACIÓN SUCESIVA DE LÍNEA ACTIVA\n"
+                    "\n"
+                    "Este documento tiene números de línea en el margen "
+                    "(1, 2, 3...). Esos números solo se permiten en "
+                    "BORRADORES de revisión, NUNCA en la versión final.\n"
+                    "\n"
+                    "SOLUCIÓN: Diseño → Números de línea → Ninguno."
+                )
+                self._add_native_comment(target, comment_text)
         except Exception as e:
             print(f"Error aplicando marcador de numeración de líneas: {e}")
+
+    def _is_in_table(self, paragraph):
+        """Detecta si un párrafo pertenece a una tabla."""
+        try:
+            for ancestor in paragraph._element.iterancestors():
+                tag = ancestor.tag
+                if isinstance(tag, str) and tag.endswith('}tbl'):
+                    return True
+        except Exception:
+            pass
+        return False
+
+    def _get_table_ancestor(self, paragraph):
+        """Retorna el elemento w:tbl ancestro del párrafo, o None."""
+        try:
+            for ancestor in paragraph._element.iterancestors():
+                tag = ancestor.tag
+                if isinstance(tag, str) and tag.endswith('}tbl'):
+                    return ancestor
+        except Exception:
+            pass
+        return None
+
+    def _get_first_paragraph_in_table(self, tbl_element):
+        """Retorna el primer Paragraph con texto dentro de la tabla."""
+        try:
+            for p_el in tbl_element.iter():
+                tag = p_el.tag
+                if isinstance(tag, str) and tag.endswith('}p'):
+                    from docx.text.paragraph import Paragraph
+                    p_obj = Paragraph(p_el, self.doc._parent)
+                    if (getattr(p_obj, '_cached_text', None) or p_obj.text or '').strip():
+                        return p_obj
+        except Exception:
+            pass
+        return None
+
+    def _apply_table_level_marker(self, tbl_element, observations, worst_status):
+        """
+        Aplica un marcador visual a TODA la tabla (borde exterior coloreado)
+        y añade un comentario en el primer párrafo de la tabla.
+        No resalta celdas individuales.
+        """
+        try:
+            # Borde exterior de la tabla según severidad
+            border_color = 'FF0000' if worst_status == 'error' else ('FFC000' if worst_status == 'warning' else '00BFFF')
+            tbl_pr = tbl_element.find(qn('w:tblPr'))
+            if tbl_pr is None:
+                tbl_pr = OxmlElement('w:tblPr')
+                tbl_element.insert(0, tbl_pr)
+            tbl_borders = OxmlElement('w:tblBorders')
+            for side in ('top', 'left', 'bottom', 'right'):
+                border_el = OxmlElement(f'w:{side}')
+                border_el.set(qn('w:val'), 'single')
+                border_el.set(qn('w:sz'), '12')
+                border_el.set(qn('w:space'), '4')
+                border_el.set(qn('w:color'), border_color)
+                tbl_borders.append(border_el)
+            tbl_pr.append(tbl_borders)
+
+            # Comentario en el primer párrafo de la tabla
+            first_p = self._get_first_paragraph_in_table(tbl_element)
+            if first_p is not None:
+                comment_text = self._build_grouped_comment_text(observations)
+                self._add_native_comment(first_p, comment_text)
+        except Exception as e:
+            print(f"Error en marcador de tabla: {e}")
 
     def _is_math_paragraph(self, paragraph):
         """Detecta si el párrafo contiene fórmulas OMML (oMath/oMathPara)."""

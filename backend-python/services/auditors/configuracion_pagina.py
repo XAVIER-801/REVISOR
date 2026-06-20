@@ -125,10 +125,41 @@ class ConfiguracionPaginaAuditor(BaseAuditor):
 
         # Verificar numeración de líneas (borradores)
         has_lines = getattr(self.engine, 'has_line_numbering', False)
-        if has_lines:
+        line_sections = getattr(self.engine, 'line_numbering_sections', [])
+        # Primer párrafo donde inicia la numeración de línea
+        first_p_idx = None
+        if line_sections:
+            valid_ps = [ls.get("first_paragraph_idx") for ls in line_sections if ls.get("first_paragraph_idx") is not None]
+            if valid_ps:
+                first_p_idx = min(valid_ps)
+        if has_lines and line_sections:
+            pos_names = {"left": "izquierdo", "right": "derecho", "outside": "exterior", "inside": "interior", "center": "centrado"}
+            sections_detail = []
+            for ls in line_sections:
+                pos_label = pos_names.get(ls.get("pos", "left"), ls.get("pos", "left"))
+                sections_detail.append(
+                    f"Sección #{ls['section_idx'] + 1}: numeración al margen {pos_label} (cada {ls['countBy']} línea(s))"
+                )
+            detail = "\n".join(sections_detail)
             self._add(
                 "Configuración de Página",
-                "Numeración de Líneas Activa",
+                "NUMERACIÓN SUCESIVA DE LÍNEA ACTIVA",
+                "error",
+                "El documento tiene NUMERACIÓN DE LÍNEAS ACTIVA. Esos números secuenciales "
+                "(1, 2, 3...) que aparecen al margen de cada página solo se permiten "
+                "en BORRADORES de revisión, NUNCA en la versión final de la tesis.\n\n"
+                "Secciones afectadas:\n"
+                f"{detail}\n\n"
+                "SOLUCIÓN: Pestaña 'Diseño' (o 'Disposición') → 'Números de línea' → "
+                "Seleccionar 'Ninguno'. Si tiene varias secciones, repita para cada sección.",
+                "Ninguno (Sin numeración de líneas)",
+                f"Numeración activa en {len(line_sections)} sección(es)\n{detail}",
+                p_idx=first_p_idx,
+            )
+        elif has_lines:
+            self._add(
+                "Configuración de Página",
+                "NUMERACIÓN SUCESIVA DE LÍNEA ACTIVA",
                 "error",
                 "El documento tiene NUMERACIÓN DE LÍNEAS ACTIVA. Esos números secuenciales "
                 "(1, 2, 3...) que aparecen al margen izquierdo de cada página solo se permiten "

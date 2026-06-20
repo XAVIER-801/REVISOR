@@ -1,11 +1,13 @@
 """
 tablas.py - Auditoría de Tablas en el cuerpo del documento.
+Audita formato de etiquetas, títulos, contenido tabular y notas/fuentes.
+La validación de SECUENCIA (Etiqueta → Título → Tabla → Nota/Fuente)
+se delega a SecuenciaTablaFiguraAuditor en secuencia_tabla_figura.py.
 
 Reglas implementadas:
 - Etiqueta (Tabla X): 12pt, Negrita, Izquierda, Sangría según nivel.
 - Título descriptivo: 12pt, Cursiva (sin negrita), Izquierda, Sangría según nivel.
 - Nota/Fuente: 10pt, Normal (sin cursiva/negrita), con dos puntos, 15pt espaciado posterior.
-- Secuencia: Etiqueta → Título (cursiva) → Tabla → Nota/Fuente.
 - Encabezado de tabla (primera fila): Centrado, Negrita.
 - Interlineado de tabla: 1.0 o 1.5.
 """
@@ -19,6 +21,8 @@ class TablasAuditor(BaseAuditor):
         self._audit_table_labels_and_titles()
         self._audit_table_contents()
         self._audit_table_alignment_and_split()
+        # La validación de secuencia (Etiqueta → Título → Tabla → Nota/Fuente)
+        # se delega a SecuenciaTablaFiguraAuditor en secuencia_tabla_figura.py
 
     def _get_expected_indent_for_level(self, level):
         """Retorna sangría esperada para un nivel."""
@@ -52,7 +56,8 @@ class TablasAuditor(BaseAuditor):
             sec_upper = p.get('section', '').upper()
             if any(k in sec_upper for k in ['ÍNDICE DE TABLAS', 'INDICE DE TABLAS',
                                             'ÍNDICE GENERAL', 'INDICE GENERAL',
-                                            'TABLA DE CONTENIDOS', 'TABLA DE CONTENIDO']):
+                                            'TABLA DE CONTENIDOS', 'TABLA DE CONTENIDO',
+                                            'ACRONIMOS', 'ACRÓNIMOS']):
                 continue
 
             upper = txt.upper()
@@ -383,6 +388,10 @@ class TablasAuditor(BaseAuditor):
             if not first_entry:
                 continue
             first_idx, first_p = first_entry
+            # Saltar tablas en ACRÓNIMOS
+            sec_upper = first_p.get('section', '').upper()
+            if 'ACRONIMOS' in sec_upper or 'ACRÓNIMOS' in sec_upper:
+                continue
             p_idx = first_p['index']
             ref_text = info.get('first_cell_text') or first_p['text'].strip()[:30]
             label = f"Tabla en pág. {first_p.get('estimated_page', '?')}"
@@ -436,6 +445,22 @@ class TablasAuditor(BaseAuditor):
                         p_text=ref_text,
                     )
 
+            # ═══ Regla 3: Bordes horizontales ═══
+            if not info.get('has_horizontal_borders', False):
+                self._add(
+                    "Tablas",
+                    f"Bordes de Tabla: {label}",
+                    "warning",
+                    "La tabla no tiene bordes horizontales (líneas superior, inferior e "
+                    "internas entre filas). Según la Guía UNAP, las tablas deben estar "
+                    "marcadas por líneas horizontales. En Word: seleccionar tabla → "
+                    "Diseño de tabla → Bordes → seleccionar bordes horizontales.",
+                    "Bordes horizontales (top, bottom, insideH)",
+                    "Sin bordes horizontales detectados",
+                    p_idx=p_idx,
+                    p_text=ref_text,
+                )
+
     def _audit_table_contents(self):
         """
         Audita el contenido dentro de las tablas con reportes CONSOLIDADOS por tabla.
@@ -460,6 +485,10 @@ class TablasAuditor(BaseAuditor):
             txt = p['text'].strip()
             if not txt:
                 continue
+            # Saltar tablas en ACRÓNIMOS — no aplican reglas de tabla del cuerpo
+            sec_upper = p.get('section', '').upper()
+            if 'ACRONIMOS' in sec_upper or 'ACRÓNIMOS' in sec_upper:
+                continue
             tbl_id = p.get('tbl_id')
             if not tbl_id:
                 continue
@@ -473,30 +502,15 @@ class TablasAuditor(BaseAuditor):
         # ═══ VALIDAR ENCABEZADOS: un reporte consolidado por tabla ═══
         for tbl_id, header_paragraphs in headers_by_table.items():
             non_bold_cells = []
-            non_center_cells = []
 
             for p in header_paragraphs:
                 # Threshold más laxo (0.3): basta con que ~30% de los caracteres
                 # alfanuméricos estén en negrita. Evita falsos negativos cuando
                 # solo una palabra de varias está marcada.
-                has_xml_bold = self._is_meaningfully_bold(p, threshold=0.3)
-                # Fallback: si todo está en MAYÚSCULAS, también lo aceptamos como
-                # "encabezado destacado" (caso común en tablas científicas)
-                txt_letters = re.sub(
-                    r'[^a-zA-ZáéíóúÁÉÍÓÚñÑ]', '', p['text']
-                )
-                has_caps_bold = (
-                    len(txt_letters) > 1
-                    and txt_letters == txt_letters.upper()
-                )
-                is_bold = has_xml_bold or has_caps_bold
-
-                align = p.get('alignment', 'left')
+                is_bold = self._is_meaningfully_bold(p, threshold=0.3)
 
                 if not is_bold:
                     non_bold_cells.append(p)
-                if align != 'center':
-                    non_center_cells.append(p)
 
             ref = table_first_p[tbl_id]
             ref_text = ref['text'][:30] if ref['text'] else "Tabla"
@@ -523,27 +537,35 @@ class TablasAuditor(BaseAuditor):
                     p_text=non_bold_cells[0]['text'][:60],
                 )
 
-            # Un solo reporte por tabla cuando hay celdas sin centrar
-            if non_center_cells:
-                count = len(non_center_cells)
-                self._add(
-                    "Tablas",
-                    f"Encabezado sin centrar (pág. {page}, {count} celda{'s' if count != 1 else ''})",
-                    "error",
-                    f"La tabla en la página {page} tiene "
-                    f"{count} celda{'s' if count != 1 else ''} de encabezado sin centrar. Según la "
-                    f"Guía UNAP, todo el contenido del encabezado debe estar centrado.",
-                    "Todas las celdas del encabezado centradas",
-                    f"{count} celda{'s' if count != 1 else ''} sin centrar",
-                    p_idx=non_center_cells[0]['index'],
-                    p_text=non_center_cells[0]['text'][:60],
-                )
-
         # ═══ VALIDAR CONTENIDO: un reporte consolidado por tabla ═══
         for tbl_id, content_paragraphs in content_by_table.items():
+            # Detectar filas de contenido que son ALL-bold y están cerca del
+            # encabezado detectado → probablemente son filas de encabezado que
+            # no fueron detectadas (ej: encabezados multi-fila sin tblHeader).
+            # Esto evita falsos positivos de "Contenido con negrita" para esas filas.
+            last_header_row = -1
+            for hp in headers_by_table.get(tbl_id, []):
+                last_header_row = max(last_header_row, hp.get('row_index', -1))
+
+            content_by_row = {}
+            for p in content_paragraphs:
+                ri = p.get('row_index', -1)
+                if ri >= 0:
+                    content_by_row.setdefault(ri, []).append(p)
+
+            undetected_header_rows = set()
+            for ri in sorted(content_by_row.keys()):
+                if ri <= last_header_row + 2:
+                    cells = content_by_row[ri]
+                    if cells and all(self._is_meaningfully_bold(c, threshold=0.5) for c in cells):
+                        undetected_header_rows.add(ri)
+                else:
+                    break
+
             bold_content_cells = [
                 p for p in content_paragraphs
-                if self._is_meaningfully_bold(p, threshold=0.5)
+                if p.get('row_index', -1) not in undetected_header_rows
+                and self._is_meaningfully_bold(p, threshold=0.5)
             ]
             if bold_content_cells:
                 ref = table_first_p[tbl_id]

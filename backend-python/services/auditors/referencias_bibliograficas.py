@@ -21,68 +21,59 @@ class ReferenciasBibliograficasAuditor(BaseAuditor):
         p_idx = 0
         paragraphs_in_sec = []
 
-        # 1. Capturar párrafos de la sección de Referencias
+        # 1. Capturar párrafos de la sección de Referencias usando el campo `section`
+        in_section = False
         for p in self.paragraphs:
-            norm = p["norm"]
-            txt_raw = p["text"]
-            if "REFERENCIAS BIBLIOGRAFICAS" in norm or "REFERENCIAS BIBLIOGRÁFICAS" in norm:
-                # Saltar entrada del Índice General (tiene relleno de puntos o
-                # número de página al final)
-                if "...." in txt_raw or re.search(r"\s+\d+\s*$", txt_raw.strip()):
-                    continue
-                # Saltar también si el contexto es un índice
-                sec_upper = p.get("section", "").upper()
-                if "INDICE" in sec_upper or "ÍNDICE" in sec_upper:
-                    continue
-                # Saltar si está antes del fin del rango del índice general
-                if (hasattr(self.engine, 'last_index_idx')
-                        and self.engine.last_index_idx > 0
-                        and p["index"] <= self.engine.last_index_idx):
-                    continue
-                found_section = True
-                p_idx = p["index"]
-                
-                # Auditar el título de Referencias
-                txt = p["text"].strip()
-                size, is_bold_props, _, _ = self._get_p_props(p)
-                size = size or 0
-                align = p.get("alignment", "left")
-                is_bold = is_bold_props or any(r.get("bold") for r in p.get("runs", []))
-                s_before = p.get("spacing_before", 0)
-                s_after = p.get("spacing_after", 0)
-                line_spacing = p.get("line_spacing", 2.0)
+            sec = p.get("section", "").upper()
+            if not in_section:
+                if sec in ("REFERENCIAS", "REFERENCIAS BIBLIOGRAFICAS") and not p.get("in_table", False):
+                    txt_raw = p["text"]
+                    if "...." in txt_raw or re.search(r"\s+\d+\s*$", txt_raw.strip()):
+                        continue
+                    found_section = True
+                    in_section = True
+                    p_idx = p["index"]
 
-                ok_size = size == 16 or size == 0
-                ok_align = align == "center"
-                ok_bold = is_bold
-                ok_spacing = (s_before is None or s_before < 1) and (s_after is None or abs(s_after - 10) < 2)
-                ok_line_spacing = line_spacing is not None and abs(line_spacing - 2.0) < 0.15
+                    # Auditar el título de Referencias
+                    txt = p["text"].strip()
+                    size, is_bold_props, _, _ = self._get_p_props(p)
+                    size = size or 0
+                    align = p.get("alignment", "left")
+                    is_bold = is_bold_props or any(r.get("bold") for r in p.get("runs", []))
+                    s_before = p.get("spacing_before", 0)
+                    s_after = p.get("spacing_after", 0)
+                    line_spacing = p.get("line_spacing", 2.0)
 
-                passed = ok_size and ok_align and ok_bold and ok_spacing and ok_line_spacing
-                if passed:
-                    self._add("Referencias", "Título Referencias Bibliográficas", "passed",
-                              "El título 'REFERENCIAS BIBLIOGRÁFICAS' cumple perfectamente con la jerarquía de Nivel 1 final.",
-                              "16pt, Centrado, Negrita, Espaciado 0/10, Interlineado 2.0", "Cumple", p_idx=p_idx, p_text=txt)
-                else:
-                    req_list = []
-                    act_list = []
-                    if not ok_size:
-                        req_list.append("16pt")
-                        act_list.append(f"{size}pt")
-                    if not ok_align:
-                        req_list.append("Centrado")
-                        act_list.append(self._align_display(align))
-                    if not ok_bold:
-                        req_list.append("Negrita")
-                        act_list.append("Normal")
-                    self._add("Referencias", "Título Referencias Bibliográficas", "error",
-                              "El título de Referencias debe ser de 16pt, centrado, en negrita, con espaciado anterior 0pt y posterior 10pt, e interlineado 2.0.",
-                              ", ".join(req_list), ", ".join(act_list), p_idx=p_idx, p_text=txt)
-                continue
+                    ok_size = size == 16 or size == 0
+                    ok_align = align == "center"
+                    ok_bold = is_bold
+                    ok_spacing = (s_before is None or s_before < 1) and (s_after is None or abs(s_after - 10) < 2)
+                    ok_line_spacing = line_spacing is not None and abs(line_spacing - 2.0) < 0.15
+
+                    passed = ok_size and ok_align and ok_bold and ok_spacing and ok_line_spacing
+                    if passed:
+                        self._add("Referencias", "Título Referencias Bibliográficas", "passed",
+                                  "El título 'REFERENCIAS BIBLIOGRÁFICAS' cumple perfectamente con la jerarquía de Nivel 1 final.",
+                                  "16pt, Centrado, Negrita, Espaciado 0/10, Interlineado 2.0", "Cumple", p_idx=p_idx, p_text=txt)
+                    else:
+                        req_list = []
+                        act_list = []
+                        if not ok_size:
+                            req_list.append("16pt")
+                            act_list.append(f"{size}pt")
+                        if not ok_align:
+                            req_list.append("Centrado")
+                            act_list.append(self._align_display(align))
+                        if not ok_bold:
+                            req_list.append("Negrita")
+                            act_list.append("Normal")
+                        self._add("Referencias", "Título Referencias Bibliográficas", "error",
+                                  "El título de Referencias debe ser de 16pt, centrado, en negrita, con espaciado anterior 0pt y posterior 10pt, e interlineado 2.0.",
+                                  ", ".join(req_list), ", ".join(act_list), p_idx=p_idx, p_text=txt)
+                    continue
 
             if found_section:
-                # Terminar captura si empieza ANEXOS
-                if "ANEXOS" in norm and not p.get("in_table", False):
+                if sec not in ("REFERENCIAS", "REFERENCIAS BIBLIOGRAFICAS") or p.get("in_table", False):
                     break
                 if p["text"].strip():
                     paragraphs_in_sec.append(p)

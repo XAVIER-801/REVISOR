@@ -30,30 +30,25 @@ class ConclusionesRecomendacionesAuditor(BaseAuditor):
         p_idx = 0
         paragraphs_in_sec = []
 
-        # 1. Capturar párrafos de la sección
+        # 1. Capturar párrafos de la sección usando el campo `section`
+        #    (calculado por word_engine.py, evita falsos positivos por
+        #     palabras como "conclusiones" en texto corriente)
+        in_section = False
         for p in self.paragraphs:
-            norm = p["norm"]
-            if key_search in norm and not p.get("in_table", False):
-                txt_raw = p["text"]
-                # Saltar entrada del Índice General (relleno de puntos o
-                # número de página al final, ej: "V. CONCLUSIONES    195")
-                if "...." in txt_raw or re.search(r"\s+\d+\s*$", txt_raw.strip()):
+            sec = p.get("section", "").upper()
+            if not in_section:
+                if key_search == sec and not p.get("in_table", False):
+                    txt_raw = p["text"]
+                    # Saltar entrada del Índice General
+                    if "...." in txt_raw or re.search(r"\s+\d+\s*$", txt_raw.strip()):
+                        continue
+                    found_section = True
+                    in_section = True
+                    p_idx = p["index"]
                     continue
-                sec_upper = p.get("section", "").upper()
-                if "INDICE" in sec_upper or "ÍNDICE" in sec_upper:
-                    continue
-                # Saltar si está antes del fin del rango del índice general
-                if (hasattr(self.engine, 'last_index_idx')
-                        and self.engine.last_index_idx > 0
-                        and p["index"] <= self.engine.last_index_idx):
-                    continue
-                found_section = True
-                p_idx = p["index"]
-                continue
-                
-            if found_section:
-                # Terminar captura si empieza otra sección principal
-                if any(k in norm for k in ["RECOMENDACIONES", "REFERENCIAS", "ANEXOS"]) and not p.get("in_table", False):
+            else:
+                # Salir cuando cambie la sección
+                if key_search != sec or p.get("in_table", False):
                     break
                 if p["text"].strip():
                     paragraphs_in_sec.append(p)

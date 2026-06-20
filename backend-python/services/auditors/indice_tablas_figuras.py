@@ -187,21 +187,29 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
                               f"Las entradas del índice deben ser de 12pt.",
                               "12pt", f"{size}pt", p_idx=p['index'], p_text=txt)
 
-                # Recolectar entrada para cruce de páginas
+                # Recolectar entrada para cruce de páginas y completitud
+                entry = {'label': label, 'p': p}
                 page_match = re.search(r'(?:\.{2,}|\s+)(\d+)\s*$', txt)
                 if page_match:
-                    entry = {'label': label, 'page': int(page_match.group(1)), 'p': p}
-                    if is_in_tables_index:
-                        table_entries.append(entry)
-                    elif is_in_figures_index:
-                        figure_entries.append(entry)
-                    elif is_in_annexes_index:
-                        annex_entries.append(entry)
+                    entry['page'] = int(page_match.group(1))
+                else:
+                    entry['page'] = None
+                if is_in_tables_index:
+                    table_entries.append(entry)
+                elif is_in_figures_index:
+                    figure_entries.append(entry)
+                elif is_in_annexes_index:
+                    annex_entries.append(entry)
 
         # Cruce de páginas del índice vs contenido real
         self._cross_reference_pages(table_entries, body_items, "Tablas", "ÍNDICE DE TABLAS")
         self._cross_reference_pages(figure_entries, body_items, "Figuras", "ÍNDICE DE FIGURAS")
         self._cross_reference_pages(annex_entries, body_items, "Anexos", "ÍNDICE DE ANEXOS")
+
+        # Cruce de COMPLETITUD: elementos que faltan en el índice o en el cuerpo
+        self._cross_reference_completeness(table_entries, body_items, "Tablas", "ÍNDICE DE TABLAS")
+        self._cross_reference_completeness(figure_entries, body_items, "Figuras", "ÍNDICE DE FIGURAS")
+        self._cross_reference_completeness(annex_entries, body_items, "Anexos", "ÍNDICE DE ANEXOS")
 
         # Reportar presencia de hipervínculos
         self._report_hyperlinks(table_idx_start, "Tablas", "ÍNDICE DE TABLAS")
@@ -214,8 +222,21 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
         self._audit_index_spacing("ÍNDICE DE ANEXOS", "Anexos")
 
     def _build_body_items_map(self):
+        """
+        Construye un mapa de elementos reales (Tabla/Figura/Anexo) encontrados
+        en el CUERPO del documento (fuera de las secciones de índice), con su
+        página estimada. Esto permite el cruce bidireccional:
+          - Índice → Cuerpo: ¿lo que lista el índice realmente existe?
+          - Cuerpo → Índice: ¿lo que existe en el cuerpo está en el índice?
+        """
         body_items = {}
-        in_annexes = False
+        index_sections = {
+            'ÍNDICE DE TABLAS', 'INDICE DE TABLAS',
+            'ÍNDICE DE FIGURAS', 'INDICE DE FIGURAS',
+            'ÍNDICE DE ANEXOS', 'INDICE DE ANEXOS',
+            'ÍNDICE DE CUADROS', 'INDICE DE CUADROS',
+            'ÍNDICE DE ILUSTRACIONES', 'INDICE DE ILUSTRACIONES',
+        }
         for p in self.paragraphs:
             txt = p['text'].strip()
             if not txt:
@@ -223,11 +244,7 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
 
             # Saltar párrafos dentro de los propios índices (falsos positivos)
             sec_upper = p.get('section', '').upper()
-            if any(k in sec_upper for k in ['ÍNDICE DE TABLAS', 'INDICE DE TABLAS',
-                                             'ÍNDICE DE FIGURAS', 'INDICE DE FIGURAS',
-                                             'ÍNDICE DE ANEXOS', 'INDICE DE ANEXOS',
-                                             'ÍNDICE DE CUADROS', 'INDICE DE CUADROS',
-                                             'ÍNDICE DE ILUSTRACIONES', 'INDICE DE ILUSTRACIONES']):
+            if any(k in sec_upper for k in index_sections):
                 continue
 
             m = re.match(r'^(Tabla|Figura|Anexo)\s+([A-Z0-9]+)', txt, re.IGNORECASE)
@@ -236,25 +253,32 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
                 num = m.group(2)
                 key = f"{pfx} {num}"
                 page = p.get('estimated_page', p.get('page', 1))
-                if key not in body_items and not in_annexes:
+                if key not in body_items:
                     body_items[key] = page
-
-            # Trackear si entramos a la sección de anexos
-            upper = txt.upper()
-            if any(k in upper for k in ['ÍNDICE DE ANEXOS', 'INDICE DE ANEXOS']) and '....' not in txt:
-                in_annexes = True
         return body_items
 
     def _cross_reference_pages(self, entries, body_items, label, section_name):
-        if not entries:
+        """
+        Verifica que los números de página del índice coincidan con las
+        páginas reales de los elementos en el cuerpo del documento.
+        
+        Solo considera entradas que tienen número de página Y existen en el
+        cuerpo (las que faltan en el cuerpo se reportan en
+        _cross_reference_completeness).
+        """
+        # Solo entradas con página Y que existen en el cuerpo
+        page_entries = [
+            e for e in entries
+            if e.get('page') is not None and e['label'] in body_items
+        ]
+        if not page_entries:
             return
+        
         diffs = []
-        for e in entries:
-            label_key = e['label']
-            body_page = body_items.get(label_key)
-            if body_page is not None:
-                diff = body_page - e['page']
-                diffs.append(diff)
+        for e in page_entries:
+            body_page = body_items[e['label']]
+            diff = body_page - e['page']
+            diffs.append(diff)
 
         if not diffs:
             return
@@ -263,19 +287,22 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
         diff_counter = Counter(diffs)
         offset = diff_counter.most_common(1)[0][0]
 
-        mismatches = [(e, body_items.get(e['label'])) for e in entries
-                      if e['label'] in body_items
-                      and (body_items[e['label']] - e['page']) != offset]
+        mismatches = [
+            (e, body_items[e['label']]) for e in page_entries
+            if (body_items[e['label']] - e['page']) != offset
+        ]
 
-        total_checked = sum(1 for e in entries if e['label'] in body_items)
+        total_checked = len(page_entries)
         ok = len(mismatches) == 0
 
         if ok and total_checked > 0:
-            first_label = entries[0]['label']
+            first_label = page_entries[0]['label']
             first_body = body_items.get(first_label)
-            first_detail = (f"'{first_label}' aparece en página {first_body} del documento"
-                            if first_body is not None
-                            else f"'{first_label}' (no encontrado en el cuerpo)")
+            first_detail = (
+                f"'{first_label}' aparece en página {first_body} del documento"
+                if first_body is not None
+                else f"'{first_label}' (no encontrado en el cuerpo)"
+            )
             self._add(
                 "Índice de Tablas/Figuras",
                 f"Cruce de páginas: {section_name}",
@@ -283,7 +310,7 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
                 f"Todas las páginas del {section_name} coinciden con el contenido real "
                 f"(offset estimado: {offset:+d}, basado en {total_checked} entradas). "
                 f"Ej: {first_detail} "
-                f"y listada como página {entries[0]['page']} en el índice "
+                f"y listada como página {page_entries[0]['page']} en el índice "
                 f"(diferencia: {offset:+d}).",
                 f"Coinciden ({total_checked}/{total_checked})",
                 f"Coinciden",
@@ -314,6 +341,66 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
                     f"Coincidentes: {total_checked - len(mismatches)}/{total_checked}",
                     f"Incorrectas: {len(mismatches)}/{total_checked}",
                 )
+
+    def _cross_reference_completeness(self, index_entries, body_items, label_plural, section_name):
+        """
+        Verifica la correspondencia BIDIRECCIONAL entre el índice y el contenido real.
+
+        1. Índice → Cuerpo: elementos listados en el índice que NO existen en el cuerpo.
+           (Error: entrada fantasma en el índice, el elemento ya no está en el documento)
+
+        2. Cuerpo → Índice: elementos en el cuerpo que NO están listados en el índice.
+           (Warning: el elemento existe en el documento pero falta en el índice)
+
+        Funciona para Tablas, Figuras y Anexos de forma unificada.
+        """
+        label_singular = label_plural.rstrip('s')  # "Tablas" -> "Tabla", "Figuras" -> "Figura"
+
+        # Etiquetas del índice que corresponden a este tipo
+        index_labels = {
+            e['label'] for e in index_entries
+            if e['label'].startswith(label_singular)
+        }
+        # Etiquetas del cuerpo que corresponden a este tipo
+        body_labels = {
+            k for k in body_items
+            if k.startswith(label_singular)
+        }
+
+        # ── 1. Índice → Cuerpo: elemento listado pero NO encontrado en el cuerpo ──
+        missing_in_body = index_labels - body_labels
+        for ml in sorted(missing_in_body):
+            entry = next((e for e in index_entries if e['label'] == ml), None)
+            page_str = f"página {entry['page']}" if entry and entry.get('page') is not None else "ubicación desconocida"
+            self._add(
+                "Índice de Tablas/Figuras",
+                f"Elemento listado pero no encontrado en contenido: {ml}",
+                "error",
+                f"El {section_name} lista '{ml}' en {page_str}, "
+                f"pero NO se encontró ninguna ocurrencia de '{ml}' en el cuerpo del documento. "
+                f"Esto puede deberse a que el elemento fue renombrado, eliminado o su etiqueta "
+                f"cambiada sin actualizar el índice correspondiente.",
+                f"'{ml}' presente en el cuerpo del documento",
+                f"No encontrado en el cuerpo",
+                p_idx=entry['p']['index'] if entry else None,
+                p_text=entry['p']['text'] if entry else ml,
+            )
+
+        # ── 2. Cuerpo → Índice: elemento en el cuerpo pero AUSENTE del índice ──
+        missing_in_index = body_labels - index_labels
+        for ml in sorted(missing_in_index):
+            page = body_items.get(ml, '?')
+            self._add(
+                "Índice de Tablas/Figuras",
+                f"Elemento no listado en el índice: {ml}",
+                "warning",
+                f"Se encontró '{ml}' en página {page} del cuerpo del documento, "
+                f"pero NO está listado en el {section_name}. "
+                f"Agregue este elemento al índice para mantener la integridad "
+                f"estructural del documento y facilitar la navegación.",
+                f"'{ml}' listado en el {section_name}",
+                f"Ausente del índice",
+            )
 
     def _audit_page_titles(self):
         """

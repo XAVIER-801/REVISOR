@@ -81,8 +81,7 @@ export default function BookViewer({ onClose, pdfUrl }) {
       }
 
       pdf.getPage(pageNum).then((page) => {
-        // Escala adaptada de 2.0 para una excelente definición del texto
-        const viewport = page.getViewport({ scale: 2.0 });
+        const viewport = page.getViewport({ scale: 3.0 });
         canvas.height = viewport.height;
         canvas.width = viewport.width;
 
@@ -301,13 +300,13 @@ export default function BookViewer({ onClose, pdfUrl }) {
           align-items: center !important;
           justify-content: center !important;
           z-index: 3000 !important;
-          padding: 1.5rem !important;
+          padding: 0 !important;
         }
 
         .book-modal-container {
-          height: 96vh !important;
-          width: 96vw !important;
-          max-width: 1650px !important;
+          height: 100vh !important;
+          width: 100vw !important;
+          max-width: 100vw !important;
           background: #06080A !important;
           padding: 0 !important;
           display: flex;
@@ -315,17 +314,18 @@ export default function BookViewer({ onClose, pdfUrl }) {
           border: 1px solid rgba(69, 245, 229, 0.25) !important;
           box-shadow: 0 0 60px rgba(69, 245, 229, 0.15) !important;
           overflow: hidden;
-          border-radius: 20px !important;
+          border-radius: 0 !important;
         }
 
         .book-modal-header {
-          padding: 1rem 2rem;
+          padding: 0.6rem 1.5rem;
           border-bottom: 1px solid rgba(255,255,255,0.06);
           display: flex;
           justify-content: space-between;
           align-items: center;
           background: rgba(10, 13, 16, 0.75);
           backdrop-filter: blur(10px);
+          flex-shrink: 0;
         }
 
         .quick-nav-tabs {
@@ -379,8 +379,8 @@ export default function BookViewer({ onClose, pdfUrl }) {
           align-items: center;
           justify-content: center;
           background: radial-gradient(circle, #0e1217 0%, #06080a 100%);
-          padding: 1.5rem;
-          overflow: auto !important; /* Permitir scroll cuando hay zoom */
+          padding: 0.25rem;
+          overflow: auto !important;
         }
 
         .book-viewport::-webkit-scrollbar {
@@ -406,14 +406,14 @@ export default function BookViewer({ onClose, pdfUrl }) {
           display: flex;
           width: 100%;
           height: 100%;
-          max-width: 1500px;
+          max-width: 100%;
           justify-content: center;
           align-items: center;
         }
 
         .book-page {
-          width: 48%;
-          height: 98%;
+          width: 49.5%;
+          height: 100%;
           background: #ffffff;
           position: relative;
           display: flex;
@@ -425,9 +425,9 @@ export default function BookViewer({ onClose, pdfUrl }) {
         }
 
         .book-page-single {
-          width: 60%;
-          max-width: 780px;
-          height: 98%;
+          width: 80%;
+          max-width: 1200px;
+          height: 100%;
           background: #ffffff;
           position: relative;
           display: flex;
@@ -463,10 +463,10 @@ export default function BookViewer({ onClose, pdfUrl }) {
         .book-spine {
           position: absolute;
           left: 50%;
-          top: 1%;
+          top: 0;
           transform: translateX(-50%);
           width: 16px;
-          height: 98%;
+          height: 100%;
           background: linear-gradient(90deg, 
             rgba(0,0,0,0.4) 0%, 
             rgba(255,255,255,0.08) 50%, 
@@ -480,12 +480,13 @@ export default function BookViewer({ onClose, pdfUrl }) {
 
         /* CONTROLES */
         .book-controls {
-          padding: 1rem 2.5rem;
+          padding: 0.6rem 1.5rem;
           border-top: 1px solid rgba(255,255,255,0.06);
           display: flex;
           justify-content: space-between;
           align-items: center;
           background: rgba(10, 13, 16, 0.7);
+          flex-shrink: 0;
         }
 
         .book-control-btn {

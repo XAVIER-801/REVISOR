@@ -589,7 +589,7 @@ class IndiceGeneralAuditor(BaseAuditor):
             actual_line_spacing = f"Interlineado: {line_spacing or 'Por defecto'}"
             actual_bold = "Negrita" if is_bold else "Normal"
             actual_italic = " Cursiva" if is_italic else ""
-            actual_indent = f"Sangría: izq {indent_left_cm}cm, der {indent_right_cm}cm, 1ra {indent_first_cm}cm"
+            actual_indent = "Sangría: sin sangría de ningún tipo" if ok_indent else f"Sangría: con sangría (izq {indent_left_cm}cm)"
             actual_desc = f"{actual_spacing}, {actual_align}, {actual_line_spacing}, {actual_bold}{actual_italic}, {actual_indent}"
 
             passed = ok_align and ok_bold and ok_spacing and ok_line_spacing and ok_indent

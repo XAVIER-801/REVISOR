@@ -118,14 +118,15 @@ class EstiloEscrituraAuditor(BaseAuditor):
 
                 alerts = linguistic.analyze_paragraph(p["text"], run_nlp=run_nlp)
 
-                # Excluir punto final en Dedicatoria, Agradecimientos e Índice
+                # Excluir punto final en títulos, Dedicatoria, Agradecimientos e Índice
                 is_in_index = False
                 if self.index_start_idx != -1 and self.last_index_idx != -1:
                     if self.index_start_idx <= i <= self.last_index_idx:
                         is_in_index = True
 
                 p_sec_norm = self._norm(p.get("section", ""))
-                if ("DEDICATORIA" in p_sec_norm or "AGRADECIMIENTOS" in p_sec_norm
+                if (p.get("is_heading") or "DEDICATORIA" in p_sec_norm
+                        or "AGRADECIMIENTOS" in p_sec_norm
                         or is_in_index or "INDICE" in p_sec_norm):
                     alerts = [a for a in alerts if "punto final" not in a]
 

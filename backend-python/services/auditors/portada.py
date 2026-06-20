@@ -8,6 +8,8 @@ Reglas implementadas:
 - Frase "PARA OPTAR EL TÍTULO PROFESIONAL DE:" debe terminar con dos puntos
 - Logo: dimensiones 4.33cm x 4.68cm
 - Fuente: Times New Roman en toda la portada
+- No deben existir líneas vacías al inicio de la portada
+- "UNIVERSIDAD NACIONAL DEL ALTIPLANO" debe ser la primera línea de contenido
 """
 import re
 from .base_auditor import BaseAuditor
@@ -27,11 +29,35 @@ class PortadaAuditor(BaseAuditor):
                 first_text_p = p
                 break
 
+        # 1a. Validar que NO existan líneas vacías antes del contenido en la portada
+        first_cover_idx = cover_paragraphs[0]["index"]
+        empty_before = 0
+        for p in cover_paragraphs:
+            if p["text"].strip():
+                break
+            if not p["text"].strip():
+                empty_before += 1
+
+        if empty_before > 0:
+            self._add("Portada", "Líneas Vacías al Inicio", "error",
+                      f"La portada no debe contener líneas vacías al inicio. Se encontraron {empty_before} párrafo(s) vacío(s) antes del contenido. El texto debe comenzar en la primera línea.",
+                      "0 líneas vacías", f"{empty_before} línea(s) vacía(s)",
+                      p_idx=cover_paragraphs[0]["index"])
+
+        # 1b. Validar que el contenido empiece exactamente en la primera línea de la portada
+        #     y que "UNIVERSIDAD NACIONAL DEL ALTIPLANO" sea el primer texto visible
         if first_text_p:
             txt = first_text_p["text"].strip()
             norm = first_text_p["norm"]
             size, bold, italic, font = self._get_p_props(first_text_p)
             align = first_text_p.get("alignment", "left")
+
+            # Verificar si el primer párrafo con texto es exactamente el primer párrafo de la portada
+            if cover_paragraphs[0]["index"] != first_text_p["index"]:
+                self._add("Portada", "Contenido en Primera Línea", "error",
+                          "El contenido de la portada debe empezar en la primera línea. No deben existir párrafos vacíos al inicio.",
+                          "Primer párrafo con contenido", f"Hay {empty_before} párrafo(s) vacío(s) antes",
+                          p_idx=first_text_p["index"], p_text=txt)
 
             is_unap = "UNIVERSIDAD NACIONAL DEL ALTIPLANO" in norm or "UNIVEROSDAD" in norm or "UNIVERSIDAD NACIONAL" in norm
 
@@ -47,8 +73,8 @@ class PortadaAuditor(BaseAuditor):
                           p_idx=first_text_p["index"], p_text=txt)
             else:
                 self._add("Portada", "Título de la Universidad", "error",
-                          "La portada debe empezar con el nombre de la universidad: 'UNIVERSIDAD NACIONAL DEL ALTIPLANO' en tamaño 18pt, en Negrita y Centrado.",
-                          "UNIVERSIDAD NACIONAL DEL ALTIPLANO", txt[:40],
+                          "La portada debe empezar con 'UNIVERSIDAD NACIONAL DEL ALTIPLANO' como primera línea de contenido, en tamaño 18pt, en Negrita y Centrado.",
+                          "UNIVERSIDAD NACIONAL DEL ALTIPLANO como primera línea", txt[:40],
                           p_idx=first_text_p["index"], p_text=txt)
         else:
             self._add("Portada", "Título de la Universidad", "error",

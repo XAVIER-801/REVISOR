@@ -1,11 +1,13 @@
 """
 figuras.py - Auditoría de Figuras en el cuerpo del documento.
+Audita formato de etiquetas, títulos, imágenes y notas/fuentes.
+La validación de SECUENCIA (Etiqueta → Título → Figura → Nota/Fuente)
+se delega a SecuenciaTablaFiguraAuditor en secuencia_tabla_figura.py.
 
 Reglas implementadas:
 - Etiqueta (Figura X): 12pt, Negrita, Izquierda, Sangría según nivel.
 - Título descriptivo: 12pt, Cursiva (sin negrita), Izquierda, Sangría según nivel.
 - Nota/Fuente: 10pt, Normal (sin cursiva/negrita), con dos puntos, 15pt espaciado posterior.
-- Secuencia: Etiqueta → Título (cursiva) → Figura → Nota/Fuente.
 """
 import re
 from .base_auditor import BaseAuditor
@@ -16,6 +18,8 @@ class FigurasAuditor(BaseAuditor):
     def audit(self):
         self._audit_figure_labels_and_titles()
         self._audit_figure_image_alignment()
+        # La validación de secuencia (Etiqueta → Título → Figura → Nota/Fuente)
+        # se delega a SecuenciaTablaFiguraAuditor en secuencia_tabla_figura.py
 
     def _audit_figure_image_alignment(self):
         """
@@ -29,9 +33,13 @@ class FigurasAuditor(BaseAuditor):
             if not has_drawing:
                 continue
 
-            # Saltar imágenes en páginas preliminares (jurados, turnitin)
+            # Saltar imágenes en páginas preliminares (jurados, turnitin) e índices
             sec_upper = p.get('section', '').upper()
-            if any(k in sec_upper for k in ['JURADOS', 'SIMILITUD', 'DEDICATORIA']):
+            if any(k in sec_upper for k in ['JURADOS', 'SIMILITUD', 'DEDICATORIA',
+                                             'ÍNDICE DE TABLAS', 'INDICE DE TABLAS',
+                                             'ÍNDICE DE FIGURAS', 'INDICE DE FIGURAS',
+                                             'ÍNDICE GENERAL', 'INDICE GENERAL',
+                                             'TABLA DE CONTENIDOS', 'TABLA DE CONTENIDO']):
                 continue
 
             # Buscar la etiqueta "Figura N" o "Tabla N" más cercana hacia arriba para contexto (máximo 10 párrafos atrás)
@@ -118,6 +126,8 @@ class FigurasAuditor(BaseAuditor):
                     )
                 else:
                     self._add(category, f"Sangría de Imagen: {label_text}", "passed", "Sangría correcta", f"{exp_l_cm}cm", f"{l_cm}cm", p_idx=p['index'])
+
+
 
     def _get_expected_indent_for_level(self, level):
         """Retorna sangría esperada para un nivel."""

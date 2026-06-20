@@ -114,6 +114,7 @@ class StyleResolver:
     def __init__(self, docx_path):
         self.docx_path = docx_path
         self.style_map = {}
+        self.table_style_map = {}
         self.default_rpr = {}
         self.default_ppr = {}
         self.section_props = {}
@@ -137,6 +138,7 @@ class StyleResolver:
                 sid = s_el.get(f'{{{NSMAP["w"]}}}styleId')
                 if not sid: continue
                 
+                stype = s_el.get(f'{{{NSMAP["w"]}}}type')
                 rpr = parse_rpr(s_el.find('w:rPr', NSMAP))
                 ppr_el = s_el.find('w:pPr', NSMAP)
                 ppr = parse_ppr(ppr_el)
@@ -144,9 +146,20 @@ class StyleResolver:
                     rpr.update(parse_rpr(ppr_el.find('w:rPr', NSMAP)))
                 
                 parent = _val(s_el.find('w:basedOn', NSMAP))
-                self.style_map[sid] = {'rpr': rpr, 'ppr': ppr, 'parent': parent}
 
-            # Resolver cadenas de herencia
+                if stype == 'table':
+                    # Cargar estilos condicionales de tabla (firstRow, band1Horiz, etc.)
+                    tbl_rpr_map = {}
+                    for tsp in s_el.findall('w:tblStylePr', NSMAP):
+                        ttype = tsp.get(f'{{{NSMAP["w"]}}}type')
+                        tsp_rpr = parse_rpr(tsp.find('w:rPr', NSMAP))
+                        if ttype and tsp_rpr:
+                            tbl_rpr_map[ttype] = tsp_rpr
+                    self.table_style_map[sid] = {'rpr_map': tbl_rpr_map, 'parent': parent}
+                else:
+                    self.style_map[sid] = {'rpr': rpr, 'ppr': ppr, 'parent': parent}
+
+            # Resolver cadenas de herencia para paragraph/character styles
             for _ in range(5):
                 changed = False
                 for sid, data in self.style_map.items():
@@ -159,6 +172,18 @@ class StyleResolver:
                         for k, v in parent['ppr'].items():
                             if k not in data['ppr']:
                                 data['ppr'][k] = v
+                                changed = True
+                if not changed: break
+
+            # Resolver herencia para estilos de tabla
+            for _ in range(5):
+                changed = False
+                for sid, data in self.table_style_map.items():
+                    if data['parent'] and data['parent'] in self.table_style_map:
+                        parent = self.table_style_map[data['parent']]
+                        for ttype, prpr in parent['rpr_map'].items():
+                            if ttype not in data['rpr_map']:
+                                data['rpr_map'][ttype] = prpr
                                 changed = True
                 if not changed: break
         except: pass

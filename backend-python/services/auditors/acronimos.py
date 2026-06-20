@@ -124,10 +124,12 @@ class AcronimosAuditor(BaseAuditor):
             txt = p['text'].strip()
             p_idx = p['index']
             
-            # --- Regla: No deben estar dentro de una tabla ---
+            # --- Regla: No deben estar dentro de una tabla (sugerencia) ---
             if p.get('in_table', False):
-                self._add("Acrónimos", "Estructura Acrónimos (No Tabla)", "error",
-                          "La sección de acrónimos no debe redactarse dentro de una tabla. Debe redactarse como texto libre separado por tabulaciones.",
+                self._add("Acrónimos", "Estructura Acrónimos (No Tabla)", "warning",
+                          "Se recomienda que esta sección no esté redactada dentro de una tabla. "
+                          "Los acrónimos y significados deben separarse mediante tabulaciones "
+                          "en texto libre, no dentro de celdas de tabla.",
                           "Párrafos con tabulaciones", "Dentro de una tabla", p_idx=p_idx, p_text=txt)
                 continue
 

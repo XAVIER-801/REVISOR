@@ -156,6 +156,30 @@ class EspaciadoTitulosContenidoAuditor(BaseAuditor):
         Determina la categoría de un párrafo y retorna (rule_key, sub_type).
         Retorna (None, None) si no aplica ninguna regla.
         """
+        # 0. SALTAR FIGURAS, TABLAS, CUADROS, NOTAS, FUENTES
+        # Estas tienen su propia auditoría en figuras.py / tablas.py y no deben
+        # ser validadas con reglas de espaciado de contenido normal.
+        if re.match(r'^(FIGURA|TABLA|CUADRO|GRAFICO|ILUSTRACION)\s+\d+', norm):
+            return (None, None)
+        if norm:
+            first_word = norm.split(' ', 1)[0].rstrip(':')
+            if first_word in ('NOTA', 'FUENTE'):
+                return (None, None)
+        if p.get('drawings') and len(p.get('drawings')) > 0:
+            return (None, None)
+
+        # Detectar si este párrafo es título descriptivo de figura/tabla
+        # (párrafo inmediatamente después de una etiqueta FIGURA/TABLA N:)
+        for k in range(i - 1, max(-1, i - 3), -1):
+            prev_norm = self.paragraphs[k]['norm']
+            if re.match(r'^(FIGURA|TABLA|CUADRO)\s+\d+', prev_norm):
+                return (None, None)
+            # Si el párrafo anterior tiene dibujos grandes, este podría ser título
+            prev_drawings = self.paragraphs[k].get('drawings', [])
+            if any(d.get('width', 0) >= 8.0 for d in prev_drawings):
+                if len(txt) < 150:
+                    return (None, None)
+
         bold = self._is_meaningfully_bold(p)
         align = p.get('alignment', 'left')
         size = p['runs'][0].get('size', 0) if p.get('runs') else 0
@@ -223,18 +247,21 @@ class EspaciadoTitulosContenidoAuditor(BaseAuditor):
         return (None, None)
 
     def _clasifica_vineta(self, i, p):
-        """Determina si una viñeta es intermedia o la última del bloque."""
-        # Mirar hacia adelante para ver si la siguiente línea también es viñeta
-        for j in range(i + 1, min(i + 3, len(self.paragraphs))):
+        """Determina si una viñeta es intermedia o la última del bloque.
+        Escanea hasta 20 párrafos adelante para ubicar la última viñeta real."""
+        last_idx = i
+        for j in range(i + 1, min(i + 20, len(self.paragraphs))):
             next_p = self.paragraphs[j]
             next_txt = next_p['text'].strip()
             if not next_txt:
                 continue
             if self._es_vineta(next_p, next_txt):
-                return ("vineta_intermedia", "bullet_mid")
-            # Si el siguiente párrafo no es viñeta pero tiene texto, este es el último
+                last_idx = j
+            else:
+                break
+        if i == last_idx:
             return ("vineta_final", "bullet_last")
-        return ("vineta_final", "bullet_last")
+        return ("vineta_intermedia", "bullet_mid")
 
     def _es_vineta(self, p, txt):
         """Detección simple de viñetas por sangría francesa y símbolo inicial."""

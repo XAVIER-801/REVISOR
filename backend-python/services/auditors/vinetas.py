@@ -23,6 +23,8 @@ class VinetasAuditor(BaseAuditor):
         in_index_or_prelim = True
         current_bullet_symbol = None
         current_sub_bullet_symbol = None
+        block_first_indent_left = None
+        block_first_indent_hanging = None
 
         for i, p in enumerate(self.paragraphs):
             txt = p['text'].strip()
@@ -69,15 +71,30 @@ class VinetasAuditor(BaseAuditor):
             if not is_bullet:
                 current_bullet_symbol = None
                 current_sub_bullet_symbol = None
+                block_first_indent_left = None
+                block_first_indent_hanging = None
                 continue
 
-            # Si el símbolo no es permitido, solo registrar error y no continuar validación
+            # Si el símbolo no es estándar, advertir pero NO rechazar la viñeta
             if not is_symbol_ok:
+                standard_symbols_desc = "Guion (-), Punto (•) o Numeración alfanumérica"
+                # Mapear símbolos visualmente similares a su nombre descriptivo
+                symbol_names = {
+                    '■': 'cuadrado relleno', '□': 'cuadrado vacío',
+                    '●': 'círculo relleno', '○': 'círculo vacío',
+                    '◆': 'rombo relleno', '◇': 'rombo vacío',
+                    '►': 'triángulo', '▪': 'cuadrado pequeño', '▸': 'triángulo pequeño',
+                }
+                symbol_desc = symbol_names.get(detected_symbol, f"símbolo '{detected_symbol}'")
                 self._add("Viñetas", "Símbolo de Viñeta No Permitido", "error",
-                          f"El símbolo '{detected_symbol}' no está permitido. Solo se aceptan: guion (-), punto (•) o numeración alfanumérica.",
-                          "Guion (-), Punto (•) o Numeración alfanumérica", f"Símbolo '{detected_symbol}'",
+                          f"Se detectó {symbol_desc} como viñeta. "
+                          f"Se recomienda usar un símbolo estándar: {standard_symbols_desc}. "
+                          f"Si copió el texto desde otra herramienta, pruebe reemplazar "
+                          f"el símbolo manualmente.",
+                          standard_symbols_desc, symbol_desc,
                           p_idx=p['index'], p_text=txt)
-                continue
+                # Marcar como aceptada para que pase a validación de formato
+                is_symbol_ok = True
 
             # ═══ NIVEL CONTEXTUAL ═══
             # Determinar el nivel del último título antes de esta viñeta usando
@@ -170,7 +187,30 @@ class VinetasAuditor(BaseAuditor):
                               "Las viñetas bajo nivel 4 o 5 deben tener Sangría Izquierda 3.0cm y Francesa 0.75cm.",
                               f"Izq 3.0cm, Fran 0.75cm", f"Izq {l_cm}cm, Fran {h_cm}cm", p_idx=p['index'], p_text=txt)
 
-            # 4. Symbol consistency (Guía UNAP pág. 20)
+            # 4. Consistencia de sangría en el bloque (Guía UNAP pág. 20)
+            # Todas las viñetas de un mismo bloque deben compartir la MISMA
+            # sangría izquierda y francesa. La primera viñeta del bloque
+            # define la referencia.
+            if block_first_indent_left is None:
+                block_first_indent_left = l_cm
+                block_first_indent_hanging = h_cm
+            else:
+                if abs(l_cm - block_first_indent_left) > 0.05:
+                    self._add("Viñetas", "Consistencia Sangría Viñeta", "warning",
+                              f"Todas las viñetas del bloque deben tener la misma sangría "
+                              f"izquierda. La primera viñeta tiene {block_first_indent_left}cm "
+                              f"y esta tiene {l_cm}cm.",
+                              f"{block_first_indent_left}cm", f"{l_cm}cm",
+                              p_idx=p['index'], p_text=txt)
+                if abs(h_cm - block_first_indent_hanging) > 0.05:
+                    self._add("Viñetas", "Consistencia Sangría Francesa Viñeta", "warning",
+                              f"Todas las viñetas del bloque deben tener la misma sangría "
+                              f"francesa. La primera viñeta tiene {block_first_indent_hanging}cm "
+                              f"y esta tiene {h_cm}cm.",
+                              f"{block_first_indent_hanging}cm", f"{h_cm}cm",
+                              p_idx=p['index'], p_text=txt)
+
+            # 5. Symbol consistency (Guía UNAP pág. 20)
             # "Las viñetas con un único tipo de símbolo"
             # "Las sub-viñetas con un único tipo de símbolo"
             # → ERROR (no warning) porque es regla explícita de la guía
@@ -243,9 +283,15 @@ class VinetasAuditor(BaseAuditor):
         if is_automatic_bullet:
             # Si Word dice que es automática, verificar el símbolo
             if list_lvl_text:
-                detected_symbol = list_lvl_text[0] if list_lvl_text else '•'
+                detected_symbol = list_lvl_text[0]
             else:
                 detected_symbol = txt_strip[0] if txt_strip else '•'
+
+            # Cross-check: si list_lvl_text está poblado pero el texto real
+            # empieza con un carácter distinto (copiado de IA), usar el real.
+            actual_first = txt_strip[0] if txt_strip else detected_symbol
+            if (actual_first in prohibited_symbols or ('\ue000' <= actual_first <= '\uf8ff')) and actual_first != detected_symbol:
+                detected_symbol = actual_first
 
             # RECHAZO EXPLÍCITO de símbolos prohibidos
             if detected_symbol in prohibited_symbols or ('\ue000' <= detected_symbol <= '\uf8ff'):
@@ -271,8 +317,8 @@ class VinetasAuditor(BaseAuditor):
             # 2. DETECCIÓN DE VIÑETAS ESCRITAS MANUALMENTE (más estricta)
             if txt_strip:
                 first_char = txt_strip[0]
-                h_cm = round((p.get('indent_hanging') or 0) / 567.0, 2)
-                l_cm = round((p.get('indent_left') or 0) / 567.0, 2)
+                h_cm = round(p.get('indent_hanging') or 0, 2)
+                l_cm = round(p.get('indent_left') or 0, 2)
                 next_char_is_separator = len(txt_strip) > 1 and txt_strip[1] in (' ', '\t')
                 looks_like_bullet_paragraph = (h_cm > 0.3 or l_cm > 0.3 or next_char_is_separator)
 
