@@ -47,6 +47,7 @@ from services.auditors.agradecimientos import AgradecimientosAuditor
 from services.auditors.resumen import ResumenAuditor
 from services.auditors.abstract import AbstractAuditor
 from services.auditors.anexos import AnexosAuditor
+from services.auditors.anexos_tablas_figuras import AnexosTablasFigurasAuditor
 from services.auditors.estilo_escritura import EstiloEscrituraAuditor
 from services.auditors.etiquetas_jurados import EtiquetasJuradosAuditor
 from services.auditors.acronimos import AcronimosAuditor
@@ -157,6 +158,7 @@ class WordAuditEngine:
             ConclusionesRecomendacionesAuditor(self).audit() # 💡 Conclusiones y Recomendaciones
             ReferenciasBibliograficasAuditor(self).audit() # 📚 Referencias Bibliográficas
             AnexosAuditor(self).audit()                # 📎 Anexos
+            AnexosTablasFigurasAuditor(self).audit()   # 📊 Tablas/Figuras en Anexos (si hay etiquetas)
             DeclaracionAutenticidadAuditor(self).audit() # 📜 Declaración Jurada (OBLIGATORIO UNAP)
             AutorizacionDepositoAuditor(self).audit()    # 📜 Autorización Depósito (OBLIGATORIO UNAP)
             EtiquetasJuradosAuditor(self).audit()      # 🏷️ Etiquetas Jurados
