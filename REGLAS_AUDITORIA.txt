@@ -88,3 +88,418 @@ C. CALIDAD DE ESCRITURA (MICRO-EDICIÓN):
 SISTEMA: VRI-SCANNER Expert Engine (Python-HiFi)
 VERSIÓN: 2.0.0
 ===============================================================================
+
+
+
+Plan de Implementación: Supabase + Panel Admin + Agente AutoFixer IA (con Ciclo de Seguridad)
+Objetivo General
+Construir un ecosistema donde cada tesis auditada quede registrada, el admin pueda revisar y confirmar observaciones, y un Agente AutoFixer IA que lea ese feedback, mejore automáticamente el código Python de los auditores, re-audite la misma tesis, y solo acepte la mejora si no rompió nada que estaba bien. Si algo se rompe → revierte y reintenta.
+
+Módulo 1 — Base de Datos Supabase
+Tablas a crear (SQL)
+sql
+
+-- Tabla de tesis auditadas
+create table if not exists public.thesis_audits (
+    id uuid default gen_random_uuid() primary key,
+    filename text not null,
+    school text,
+    faculty text,
+    score integer,
+    errors_count integer default 0,
+    warnings_count integer default 0,
+    passed_count integer default 0,
+    status text default 'pending_review',  -- 'pending_review' | 'reviewed'
+    feedback_summary text,
+    -- Path del archivo DOCX original para re-auditar con el AutoFixer
+    file_path text,
+    -- Archivo DOCX ANOTADO guardado como base64 (para descarga desde el panel admin)
+    annotated_docx_base64 text,
+    -- Snapshot JSON de todos los resultados originales (para comparación de regresión)
+    original_results_snapshot jsonb,
+    created_at timestamp with time zone default timezone('utc', now()) not null,
+    reviewed_at timestamp with time zone
+);
+-- Tabla de observaciones por tesis
+create table if not exists public.thesis_observations (
+    id uuid default gen_random_uuid() primary key,
+    thesis_id uuid references public.thesis_audits(id) on delete cascade not null,
+    rule text not null,
+    category text not null,
+    severity text not null,
+    message text,
+    expected text,
+    actual text,
+    paragraph_index integer,
+    paragraph_text text,
+    -- Feedback del admin
+    status text default 'pending',  -- 'pending' | 'confirmed_error' | 'false_positive'
+    admin_comment text,
+    -- Estado del AutoFixer para esta observación
+    ai_fix_applied boolean default false,
+    ai_fix_result text,
+    ai_fix_status text default 'none',  -- 'none' | 'applied_ok' | 'reverted' | 'retrying' | 'manual_review'
+    ai_retry_count integer default 0,
+    created_at timestamp with time zone default timezone('utc', now()) not null
+);
+-- Tabla de historial de cambios de código (log completo de cada intento)
+create table if not exists public.ai_code_fixes (
+    id uuid default gen_random_uuid() primary key,
+    observation_id uuid references public.thesis_observations(id),
+    thesis_id uuid references public.thesis_audits(id),
+    auditor_file text not null,
+    rule_affected text,
+    attempt_number integer default 1,
+    -- Resultado de la validación de regresión
+    validation_status text default 'pending',  -- 'pending' | 'passed' | 'failed_regression' | 'failed_not_fixed'
+    regression_details text,   -- Qué pasó al re-auditar (qué se rompió)
+    description text,
+    diff_preview text,
+    status text default 'pending',  -- 'applied' | 'reverted' | 'pending'
+    created_at timestamp with time zone default timezone('utc', now()) not null
+);
+-- Políticas (modo desarrollo)
+alter table public.thesis_audits enable row level security;
+alter table public.thesis_observations enable row level security;
+alter table public.ai_code_fixes enable row level security;
+create policy "allow_all" on public.thesis_audits for all using (true);
+create policy "allow_all" on public.thesis_observations for all using (true);
+create policy "allow_all" on public.ai_code_fixes for all using (true);
+Módulo 2 — Registro Automático al Auditar
+[MODIFY] thesis-reviewer/app/api/upload/route.js
+Tras recibir el resultado de auditoría del backend Python:
+
+Guardar un registro en thesis_audits (score, nombre, metadatos, y el path del archivo en el servidor).
+Guardar cada observación error o warning en thesis_observations con su paragraph_text.
+IMPORTANT
+
+Al guardar la tesis auditada en Supabase se almacenan 3 cosas críticas:
+
+file_path → path del .docx original en el servidor (para re-auditar con el AutoFixer).
+annotated_docx_base64 → el archivo DOCX con anotaciones en color (el que descarga el estudiante), guardado en Supabase para que el admin pueda descargarlo también desde el panel.
+original_results_snapshot → copia completa en JSON de todos los resultados de la primera auditoría. Este es el punto de referencia dorado que el AutoFixer usa para detectar regresiones.
+Módulo 3 — Panel de Administración Premium /admin
+[NEW] thesis-reviewer/app/admin/page.js
+Panel de 3 columnas (modo oscuro, glassmorphism, micro-animaciones):
+
+Columna Izquierda — Listado de Tesis:
+
+Buscador + filtros por estado (Pendiente / Revisado).
+Tarjetas con nombre, fecha, puntaje visual (coloreado), badge de estado.
+Columna Central — Observaciones (solo los errores/warnings):
+
+Muestra solo lo que falló (no lo que pasó).
+Por cada observación: regla, categoría, fragmento del párrafo real, esperado vs detectado.
+Botones por observación:
+✅ Confirmar Error → confirmed_error
+❌ Falso Positivo → false_positive
+Campo de texto: "¿Cómo se confundió el sistema? ¿Cuál sería la detección correcta?"
+Columna Derecha — Control del AutoFixer:
+
+Badge de estado: ⏳ N mejoras pendientes, ✅ N aplicadas correctamente, ⚠️ N revertidas.
+Botón "🔧 Ejecutar AutoFixer Ahora" → llama a POST /ai/autofix/run.
+Historial de intentos de mejora con su resultado: Aplicada ✅, Revertida y reintentando 🔄, Fallida después de N intentos ❌.
+Visor de ai_memory.json actualizado en tiempo real.
+Módulo 4 — Agente AutoFixer IA con Ciclo de Seguridad 🔒
+Flujo Completo con Validación de Regresión
+
+INICIO (invocado manualmente o cuando el servidor está activo)
+│
+├─ 1. Leer de Supabase todas las observaciones con:
+│        status IN ('confirmed_error', 'false_positive')
+│        AND ai_fix_applied = false
+│        AND ai_retry_count < 5  ← máx 5 intentos por observación
+│
+├─ Agrupar por (thesis_id, category, auditor_file)
+│
+└─ Para cada grupo de feedback:
+    ├─ 2. Identificar el archivo auditor responsable
+    │      (ej: 'Índice General' → indice_general.py)
+    │
+    ├─ 3. Leer el código actual del auditor
+    │
+    ├─ 4. *** SNAPSHOT DE SEGURIDAD ***
+    │      Guardar backup en services/auditors/backups/indice_general_YYYYMMDD_HHmmss.py
+    │
+    ├─ 5. Construir prompt para Groq con:
+    │      - Código actual del auditor
+    │      - Ejemplos reales del error (paragraph_text, expected, actual)
+    │      - Comentario del admin ("el sistema confundió X porque Y")
+    │      - Intentos previos (si hubo reintentos, incluir qué falló antes)
+    │      - Regla estricta: "Solo mejora la función responsable. No elimines ni cambies
+    │                          lógica de otras reglas. Devuelve SOLO el código completo."
+    │
+    ├─ 6. Groq devuelve el código mejorado
+    │
+    ├─ 7. *** VALIDACIÓN SINTÁCTICA ***
+    │      compile(new_code)  → si falla, revertir inmediatamente sin tocar el archivo
+    │
+    ├─ 8. *** ESCRIBIR NUEVO CÓDIGO ***
+    │      Reemplazar el archivo auditor con el código mejorado
+    │
+    ├─ 9. *** RE-AUDITAR LA MISMA TESIS ***
+    │      _run_audit_pipeline(thesis.file_path, thesis.filename)
+    │      (misma tesis que generó el feedback)
+    │
+    ├─ 10. *** COMPARACIÓN DE REGRESIÓN (EL CONJUNTO DORADO) ***
+    │
+    │       Antes de aplicar cualquier cambio se construye el "Conjunto Dorado":
+    │       Reglas que el sistema NO debe tocar porque ya están bien:
+    │
+    │       Conjunto Dorado =
+    │         (A) Todas las reglas con status='passed' en la auditoría original
+    │             (guardadas en original_results_snapshot de Supabase)
+    │         +
+    │         (B) Todas las observaciones que el ADMIN marcó como 'false_positive'
+    │             (confirmadas por humano como "esto NO era un error")
+    │
+    │       Tras re-auditar, si CUALQUIER regla del Conjunto Dorado ahora aparece
+    │       como 'error' o 'warning' → ES REGRESIÓN → REVERTIR.
+    │
+    │       ─────────────────────────────────────────────────────────────────
+    │       RESULTADOS POSIBLES:
+    │
+    │       ✅ ÉXITO:
+    │          - El error/confusión objetivo fue resuelto
+    │          - NINGUNA regla del Conjunto Dorado fue afectada
+    │          → Mantener el código nuevo
+    │          → ai_fix_status = 'applied_ok'
+    │          → Registrar en ai_code_fixes (validation_status='passed')
+    │          → Actualizar ai_memory.json con el patrón aprendido
+    │
+    │       ❌ REGRESIÓN TIPO 1 (rompió un 'passed'):
+    │          - Una regla que antes tenía status='passed' ahora falla
+    │          → Revertir al backup INMEDIATAMENTE
+    │          → regression_details = "Regla X pasaba, ahora falla. No aceptado."
+    │          → Incrementar ai_retry_count
+    │          → Reintentar con instrucción adicional: "NO toques la lógica de la regla X"
+    │
+    │       ❌ REGRESIÓN TIPO 2 (rompió un falso positivo confirmado por admin):
+    │          - Una observación que el admin confirmó como 'false_positive'
+    │            (es decir, el admin dijo "esto estaba bien") ahora vuelve a aparecer como error
+    │          → Revertir al backup INMEDIATAMENTE
+    │          → regression_details = "El admin confirmó que 'Regla Y' no era error,
+    │                                    pero el nuevo código la vuelve a reportar."
+    │          → Incrementar ai_retry_count
+    │          → Reintentar con instrucción: "La regla Y NO debe ser reportada como error"
+    │
+    │       🔄 NO SOLUCIONADO (sin regresión pero el error original persiste):
+    │          → Revertir al backup
+    │          → Registrar con validation_status='failed_not_fixed'
+    │          → Incrementar ai_retry_count con más contexto del por qué falló
+    │
+    └─ Si ai_retry_count >= 5:
+           → ai_fix_status = 'manual_review_required'
+           → El panel de admin muestra alerta: "Este error necesita corrección manual"
+[NEW] backend-python/ai_engine/auto_fixer.py
+python
+
+class AutoFixer:
+    MAX_RETRIES = 5
+    BACKUP_DIR = "services/auditors/backups/"
+    
+    AUDITOR_MAP = {
+        'Índice General': 'indice_general.py',
+        'Capítulo Nivel 1': 'capitulo_nivel1.py',
+        'Capítulo Nivel 2': 'capitulo_nivel2.py',
+        'Capítulo Niveles 3-4-5': 'capitulo_nivel345.py',
+        'Tablas': 'tablas.py',
+        'Figuras': 'figuras.py',
+        'Viñetas': 'vinetas.py',
+        'Ortografía': 'ortografia.py',
+        'Índice de Tablas y Figuras': 'indice_tablas_figuras.py',
+        'Numeración de Páginas': 'numeracion_paginas.py',
+        'Configuración de Página': 'configuracion_pagina.py',
+        'Espaciado': 'espaciado_titulos_contenido.py',
+        'Resumen': 'resumen.py',
+        'Abstract': 'abstract.py',
+        # ... etc
+    }
+    
+    def run(self) -> dict:
+        """Ejecuta el ciclo completo de auto-mejora con validación de regresión."""
+        ...
+    
+    def _get_pending_feedback(self) -> list:
+        """Lee de Supabase las observaciones con feedback confirmado sin procesar."""
+        ...
+    
+    def _create_backup(self, auditor_path: str) -> str:
+        """Crea backup con timestamp antes de cualquier modificación."""
+        ...
+    
+    def _generate_fix(self, auditor_code: str, feedback_group: list, 
+                       prev_failures: list = None) -> str:
+        """Usa Groq para generar código mejorado. Incluye fallos previos si los hay."""
+        ...
+    
+    def _validate_syntax(self, code: str) -> bool:
+        """Verifica que el código generado sea Python válido."""
+        try:
+            compile(code, "<string>", "exec")
+            return True
+        except SyntaxError:
+            return False
+    
+    def _reaudit_thesis(self, file_path: str, filename: str) -> dict:
+        """Re-audita la tesis usando el pipeline completo."""
+        from main import _run_audit_pipeline
+        return _run_audit_pipeline(file_path, filename)
+    
+    def _build_golden_set(self, original_results: list, 
+                           admin_false_positives: list) -> set:
+        """
+        Construye el Conjunto Dorado de reglas que NUNCA deben romperse:
+        1. Las que tenían status='passed' en la auditoría original.
+        2. Las que el admin marcó como 'false_positive' (confirmadas como OK por humano).
+        """
+        passed_rules = {r['rule'] for r in original_results if r['status'] == 'passed'}
+        fp_rules = {obs['rule'] for obs in admin_false_positives}
+        return passed_rules | fp_rules
+    def _check_regression(self, golden_set: set, new_results: list,
+                           target_observation: dict) -> dict:
+        """
+        Compara el Conjunto Dorado contra los nuevos resultados.
+        Retorna: {
+            'error_fixed': bool,        # ¿El error objetivo fue corregido?
+            'regression': bool,          # ¿Se rompió algo del Conjunto Dorado?
+            'regression_type': str,      # 'passed_broken' | 'false_positive_broken' | None
+            'regressions': list          # Reglas del Conjunto Dorado que ahora fallan
+        }
+        """
+        new_failed = {r['rule'] for r in new_results 
+                      if r['status'] in ('error', 'warning')}
+        
+        regressions = list(golden_set & new_failed)
+        
+        # Verificar si el error objetivo fue corregido
+        target_rule = target_observation['rule']
+        new_result_for_rule = next(
+            (r for r in new_results if r['rule'] == target_rule), None
+        )
+        error_fixed = (new_result_for_rule is None or 
+                       new_result_for_rule['status'] == 'passed')
+        
+        return {
+            'error_fixed': error_fixed,
+            'regression': len(regressions) > 0,
+            'regressions': regressions
+        }
+    
+    def _revert(self, auditor_path: str, backup_path: str):
+        """Revierte al backup inmediatamente."""
+        shutil.copy2(backup_path, auditor_path)
+    
+    def _apply_fix(self, auditor_path: str, new_code: str) -> bool:
+        """Escribe el código mejorado en el archivo auditor."""
+        ...
+[NEW] Endpoint en backend-python/main.py
+python
+
+@app.post("/ai/autofix/run")
+async def run_autofix():
+    """
+    Ejecuta el AutoFixer manualmente.
+    Solo disponible mientras el servidor está activo.
+    """
+    _ai_required()
+    fixer = AutoFixer()
+    result = fixer.run()
+    return {
+        "fixes_applied": result['applied'],
+        "fixes_reverted": result['reverted'],
+        "fixes_pending_retry": result['retrying'],
+        "fixes_manual_review": result['manual_review'],
+        "details": result['details']
+    }
+@app.get("/ai/autofix/history")
+async def autofix_history(limit: int = 50):
+    """Historial de cambios de código automáticos desde Supabase."""
+    ...
+Módulo 5 — Activación Solo con Servidor Activo
+IMPORTANT
+
+No hay cron separado. El AutoFixer no corre como proceso independiente. Se activa de dos formas, ambas requieren que el servidor FastAPI esté corriendo:
+
+Manual: El admin presiona el botón en el panel /admin.
+Automático al arrancar: Al iniciar FastAPI (startup event), si hay feedback pendiente sin procesar, el AutoFixer se lanza en background una sola vez.
+python
+
+# En main.py
+@app.on_event("startup")
+async def startup_auto_fix():
+    """Al arrancar el servidor, si hay feedback pendiente, lanza el AutoFixer en background."""
+    if AI_ENGINE_AVAILABLE:
+        import asyncio
+        asyncio.create_task(_run_autofix_background())
+async def _run_autofix_background():
+    await asyncio.sleep(10)  # Espera 10s que el server termine de iniciar
+    from ai_engine.auto_fixer import AutoFixer
+    fixer = AutoFixer()
+    result = fixer.run()
+    print(f"[STARTUP AutoFixer] {result['applied']} mejoras aplicadas, "
+          f"{result['reverted']} revertidas.")
+Flujo Completo de Extremo a Extremo
+
+[Estudiante sube tesis]
+        │
+        ▼
+[Python audita] → [Supabase: thesis_audits + thesis_observations guardados]
+        │
+        ▼
+[Admin abre /admin] → [Ve errores agrupados]
+        │
+        ├── Confirma error real + escribe comentario
+        └── Marca falso positivo + escribe por qué el sistema se confundió
+        │
+        ▼
+[Feedback en thesis_observations (Supabase)]
+        │
+        ▼
+[AutoFixer se activa] (botón del admin O al reiniciar servidor)
+        │
+        ├─ Lee feedback pendiente de Supabase
+        ├─ Backup del auditor Python responsable
+        ├─ ✅ Sin regresión + error solucionado → Mantiene cambio
+        ├─ ❌ Regresión Tipo 1 (rompió un 'passed') → Revierte + reintenta
+        ├─ ❌ Regresión Tipo 2 (falso positivo confirmado vuelve a aparecer) → Revierte + reintenta
+        └─ 🔄 Error persiste → Revierte + reintenta con más contexto
+        │
+        ▼
+[Próxima tesis auditada con el auditor mejorado]
+🔒 Resumen: Las 4 Reglas de Seguridad del AutoFixer
+#	Condición	Acción
+✅	El error se corrigió y ninguna regla del Conjunto Dorado fue afectada	Mantener el código mejorado
+❌	Rompió una regla que antes tenía passed en la auditoría original	Revertir + reintentar indicando qué no tocar
+❌	Volvió a reportar como error una observación que el admin ya confirmó como OK (false_positive)	Revertir + reintentar con esa instrucción explícita
+🔄	El error objetivo sigue igual (sin regresiones, pero tampoco se arregló)	Revertir y reintentar con más contexto
+Conjunto Dorado = reglas con status='passed' en la auditoría original + observaciones que el admin confirmó como false_positive. Si el código mejorado toca cualquier elemento de este conjunto → REVERTIR SIN EXCEPCIÓN.
+
+Archivos Afectados
+Backend Python (backend-python/)
+Archivo	Acción
+ai_engine/auto_fixer.py	[NEW] Motor completo del AutoFixer con ciclo de seguridad
+ai_engine/supabase_client.py	[NEW] Cliente Supabase para Python
+services/auditors/backups/	[NEW] Carpeta de backups automáticos
+main.py	[MODIFY] Agregar /ai/autofix/run, /ai/autofix/history, startup event
+Frontend Next.js (thesis-reviewer/)
+Archivo	Acción
+app/api/upload/route.js	[MODIFY] Guardar en Supabase tras auditar
+app/admin/page.js	[NEW] Panel de administración premium
+app/api/admin/audits/route.js	[NEW] API listado de tesis
+app/api/admin/observations/[id]/feedback/route.js	[NEW] API feedback del admin
+app/api/admin/autofix/trigger/route.js	[NEW] API para disparar AutoFixer
+utils/supabase/client.js	[NEW] Cliente Supabase para Next.js
+.env.local	[NEW] Credenciales Supabase
+Verificación
+Pruebas Automatizadas
+pytest en backend-python: todos los tests existentes deben seguir en verde.
+Test unitario test_auto_fixer.py: valida el ciclo de regresión con mocks.
+Verificación Manual (paso a paso)
+Subir tesis → verificar registros en Supabase.
+Abrir /admin → confirmar error + escribir comentario.
+Pulsar "Ejecutar AutoFixer" → el panel muestra el progreso.
+Verificar que el auditor fue modificado (git diff services/auditors/).
+Re-auditar la misma tesis → el error original debe estar resuelto.
+Verificar que ninguna regla que antes pasó ahora falla.
+Si hay regresión → panel muestra "Revertido" y el código del auditor vuelve al estado original.

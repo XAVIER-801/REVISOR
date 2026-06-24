@@ -110,7 +110,7 @@ class EstiloEscrituraAuditor(BaseAuditor):
             if p.get("is_cover"):
                 continue
             txt = p["text"].strip()
-            if len(txt) > 15 and not p.get('in_table'):
+            if len(txt) > 15 and not p.get('in_table') and not p.get('is_formula_explanation'):
                 run_nlp = False
                 if nlp_calls < 80:
                     run_nlp = True

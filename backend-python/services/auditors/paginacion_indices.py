@@ -80,14 +80,33 @@ class PaginacionIndicesAuditor(BaseAuditor):
                         "actual_page": actual_page
                     })
 
-        # Aplicar el algoritmo estadístico de offset óptimo
+        has_offset_report = False
+        most_common_diff = 0
+        pct_match = 0
+
+        # Analizar offset entre páginas del índice y páginas reales
         if pairs:
             diffs = [p["page_num"] - p["actual_page"] for p in pairs]
-            # Encontrar el offset más común (moda)
-            most_common_diff = Counter(diffs).most_common(1)[0][0]
+            diff_counts = Counter(diffs)
+            most_common_diff, most_common_count = diff_counts.most_common(1)[0]
+            total_pairs = len(pairs)
+            pct_match = round(most_common_count / total_pairs * 100)
 
+            # Si hay un offset sistemático no-cero, reportarlo como observación
+            if most_common_diff != 0 and pct_match >= 50:
+                has_offset_report = True
+                offset_detail = (f"Se detectó un desplazamiento sistemático de {most_common_diff} página(s) "
+                                 f"en {pct_match}% de las entradas del Índice General "
+                                 f"(ej. el índice marca página {pairs[0]['page_num']} pero la ubicación real es {pairs[0]['actual_page']}). "
+                                 f"Esto puede deberse a que la portada no se está contando como página 1, "
+                                 f"o a que hay páginas preliminares no numeradas que afectan el conteo.")
+                self._add("Índice General", "Desplazamiento Sistemático de Páginas", "error", offset_detail,
+                          "Páginas del índice alineadas con las hojas reales",
+                          f"Offset de {most_common_diff} páginas en ~{pct_match}% de entradas",
+                          p_idx=idx_start, p_text="ÍNDICE GENERAL")
+
+            # Flag individual para cada entrada que se desvía del patrón común
             for p in pairs:
-                # Si no coincide con el offset común, hay una inconsistencia real
                 if p["page_num"] - p["actual_page"] != most_common_diff:
                     mismatches.append({
                         "title": p["title"],
@@ -101,13 +120,14 @@ class PaginacionIndicesAuditor(BaseAuditor):
             if len(mismatches) > 4:
                 examples_str += "..."
 
-            detail = (f"La numeración de las páginas en el Índice General no coincide con la ubicación real en el documento. "
-                      f"Se detectaron {len(mismatches)} inconsistencias (Ejemplos: {examples_str}).")
+            detail = (f"Además del desplazamiento general, {len(mismatches)} entrada(s) no siguen el patrón común "
+                      f"(Ejemplos: {examples_str}). Revíselas individualmente.")
 
-            self._add("Índice General", "Consistencia de Páginas del Índice General", "error", detail,
-                      "Páginas del índice coincidentes con las hojas reales",
-                      f"Se detectaron {len(mismatches)} inconsistencias", p_idx=idx_start, p_text="ÍNDICE GENERAL")
-        else:
+            self._add("Índice General", "Inconsistencias Individuales de Paginación", "error", detail,
+                      "Entradas consistentes con el patrón general",
+                      f"{len(mismatches)} entradas fuera de patrón", p_idx=idx_start, p_text="ÍNDICE GENERAL")
+        elif not has_offset_report:
+            # Sin offset y sin mismatches → todo correcto
             self._add("Índice General", "Consistencia de Páginas del Índice General", "passed",
                       "Todas las páginas del Índice General coinciden exactamente con la ubicación real de sus títulos en el documento.",
                       "Páginas coincidentes", "Páginas coincidentes")

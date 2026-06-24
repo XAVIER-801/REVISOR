@@ -35,12 +35,21 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
 
             sec_upper = p.get('section', '').upper()
 
+            # Detectar si este párrafo pertenece a una sección de índice específico
+            # (Tablas, Figuras, Anexos) ANTES de filtrar por TOC general
             is_in_tables_index = any(k in sec_upper for k in ['ÍNDICE DE TABLAS', 'INDICE DE TABLAS', 'ÍNDICE DE CUADROS', 'INDICE DE CUADROS'])
             is_in_figures_index = any(k in sec_upper for k in ['ÍNDICE DE FIGURAS', 'INDICE DE FIGURAS', 'ÍNDICE DE ILUSTRACIONES', 'INDICE DE ILUSTRACIONES'])
             is_in_annexes_index = any(k in sec_upper for k in ['ÍNDICE DE ANEXOS', 'INDICE DE ANEXOS'])
 
+            # Solo filtrar por rango TOC si NO estamos dentro de un índice
+            # específico (Tablas/Figuras/Anexos). El last_index_idx se extiende
+            # hasta el final del último índice porque sus entradas terminan en
+            # número de página, y el algoritmo heurístico las detecta como
+            # "líneas de índice", impidiendo que este auditor las procese.
             if not (is_in_tables_index or is_in_figures_index or is_in_annexes_index):
-                continue
+                if self.index_start_idx != -1 and self.last_index_idx != -1 and self.index_start_idx <= i <= self.last_index_idx:
+                    continue
+                continue  # No está en ninguna sección de índice → saltar
 
             upper = txt.upper()
             is_item = re.match(r'^(TABLA|FIGURA|ANEXO)\s+([A-Z0-9]+)', upper)
@@ -237,7 +246,10 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
             'ÍNDICE DE CUADROS', 'INDICE DE CUADROS',
             'ÍNDICE DE ILUSTRACIONES', 'INDICE DE ILUSTRACIONES',
         }
-        for p in self.paragraphs:
+        for idx, p in enumerate(self.paragraphs):
+            # Skip paragraphs that are inside the general index (TOC) area
+            if self.index_start_idx != -1 and self.last_index_idx != -1 and self.index_start_idx <= idx <= self.last_index_idx:
+                continue
             txt = p['text'].strip()
             if not txt:
                 continue
@@ -247,7 +259,7 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
             if any(k in sec_upper for k in index_sections):
                 continue
 
-            m = re.match(r'^(Tabla|Figura|Anexo)\s+([A-Z0-9]+)', txt, re.IGNORECASE)
+            m = re.match(r'^(Tabla|Figura|Anexo)\s+([A-Z0-9]+(?:\.[A-Z0-9]+)*)', txt, re.IGNORECASE)
             if m:
                 pfx = m.group(1).capitalize()
                 num = m.group(2)
@@ -619,22 +631,31 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
                     is_match = any(k in txt_upper for k in ['ÍNDICE DE FIGURAS', 'INDICE DE FIGURAS', 'ÍNDICE DE ILUSTRACIONES', 'INDICE DE ILUSTRACIONES'])
                 else:
                     is_match = section_name in txt_upper
-                
+
                 if is_match:
                     if "...." not in p['text'] and not bool(re.search(r"\d+$", p['text'].strip())):
                         idx_start = i
             else:
-                style = p.get('style_id', '')
-                is_tdc = style.upper().startswith('TDC') if style else False
-                if not is_tdc and txt_upper and len(txt_upper) > 3:
-                    if any(k in txt_upper for k in ['ÍNDICE', 'INDICE', 'RESUMEN', 'ABSTRACT', 'ACRÓNIMOS', 'ACRONIMOS', 'DEDICATORIA', 'AGRADECIMIENTO', 'CAPITULO', 'INTRODUCCION']):
-                        if style and ('Ttulo' in style or 'Heading' in style or 'titulo' in style.lower()):
-                            idx_end = i
-                            break
+                # Once we have a start, look for the first non-entry line to mark the end.
+                if idx_start != -1:
+                    txt = p['text'].strip()
+                    if not txt:
+                        # Allow blank lines within the index
+                        continue
+                    # Check if line looks like an index entry: Tabla N, Figura N, Anexo N (case-insensitive)
+                    # Allow numbers with dots (e.g., 2.1) and alphanumeric.
+                    if re.match(r'^(TABLA|FIGURA|ANEXO)\s+[A-Z0-9]+(?:\.[A-Z0-9]+)*', txt, re.IGNORECASE):
+                        # Still inside the index
+                        continue
+                    else:
+                        # Not an entry -> end of index
+                        idx_end = i - 1
+                        break
         if idx_start == -1:
             return -1, -1
         if idx_end == -1:
-            idx_end = min(idx_start + 150, len(self.paragraphs))
+            # If we never hit a non-entry, assume the index continues to the end of document
+            idx_end = len(self.paragraphs) - 1
         return idx_start, idx_end
 
     def _audit_index_spacing(self, section_name, label):
@@ -653,8 +674,8 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
                 continue
             if section_name in upper:
                 continue
-            
-            is_item = re.match(r'^(TABLA|FIGURA|ANEXO)\s+([A-Z0-9]+)', upper)
+
+            is_item = re.match(r'^(TABLA|FIGURA|ANEXO)\s+([A-Z0-9]+(?:\.[A-Z0-9]+)*)', upper)
             if is_item:
                 entries_to_check.append(p)
                 
@@ -715,7 +736,7 @@ class IndiceTablasFigurasAuditor(BaseAuditor):
                 
             if is_sec:
                 upper = txt.upper()
-                is_item = re.match(r'^(TABLA|FIGURA|ANEXO)\s+([A-Z0-9]+)', upper)
+                is_item = re.match(r'^(TABLA|FIGURA|ANEXO)\s+([A-Z0-9]+(?:\.[A-Z0-9]+)*)', upper)
                 if is_item:
                     total_entries += 1
                     if not p.get('has_hyperlink', False):

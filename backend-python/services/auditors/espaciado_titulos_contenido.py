@@ -94,8 +94,8 @@ class EspaciadoTitulosContenidoAuditor(BaseAuditor):
             if self._is_in_index_or_prelim(i, p):
                 continue
 
-            # Saltar tablas, anexos, referencias
-            if p.get('in_table'):
+            # Saltar tablas, anexos, referencias, y aclaraciones de fórmulas
+            if p.get('in_table') or p.get('is_formula_explanation'):
                 continue
             if self.anexos_start_idx != -1 and i >= self.anexos_start_idx:
                 continue
@@ -265,6 +265,8 @@ class EspaciadoTitulosContenidoAuditor(BaseAuditor):
 
     def _es_vineta(self, p, txt):
         """Detección simple de viñetas por sangría francesa y símbolo inicial."""
+        if p.get('is_heading', False):
+            return False
         h_cm = round(p.get('indent_hanging') or 0, 2)
         if h_cm <= 0.3:
             return False

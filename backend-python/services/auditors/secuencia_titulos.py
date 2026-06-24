@@ -36,6 +36,8 @@ class SecuenciaTitulosAuditor(BaseAuditor):
         for p in self.paragraphs:
             if not p.get("is_in_body"):
                 continue
+            if p.get("in_table"):
+                continue
 
             body_level = p.get("body_level", 0)
             if body_level == 0:
@@ -101,6 +103,8 @@ class SecuenciaTitulosAuditor(BaseAuditor):
         for p in self.paragraphs:
             if not p.get("is_in_body"):
                 continue
+            if p.get("in_table"):
+                continue
             txt = p["text"].strip()
             m = chapter_pattern.match(txt)
             if not m:
@@ -152,6 +156,8 @@ class SecuenciaTitulosAuditor(BaseAuditor):
 
         for p in self.paragraphs:
             if not p.get("is_in_body"):
+                continue
+            if p.get("in_table"):
                 continue
 
             txt = p["text"].strip()

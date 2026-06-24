@@ -37,14 +37,14 @@ class AcronimosAuditor(BaseAuditor):
             if i <= self.last_index_idx:
                 continue
             sec_upper = p.get('section', '').upper()
-            if any(k in sec_upper for k in ['ÍNDICE', 'INDICE', 'TABLA DE CONTENIDOS', 'TABLA DE CONTENIDO']):
+            if any(k in sec_upper for k in ['ÍNDICE', 'INDICE', 'TABLA DE CONTENIDOS', 'TABLA DE CONTENIDO']) and 'ACRONI' not in sec_upper:
                 continue
 
             txt = p['text'].strip()
             norm = p['norm']
             
             # Detectar cabecera de la sección
-            if norm == "ACRONIMOS" or norm == "ACRÓNIMOS":
+            if norm in ["ACRONIMOS", "ACRÓNIMOS", "INDICE DE ACRONIMOS", "ÍNDICE DE ACRÓNIMOS"]:
                 # Asegurar que no sea una línea del índice general o tabla de contenido
                 if "...." not in txt and not bool(re.search(r"\d+$", txt)):
                     in_acronimos = True
@@ -85,12 +85,16 @@ class AcronimosAuditor(BaseAuditor):
             ok_s_after = abs(s_after - 10.0) < 2.0
             ok_line = line_spacing is not None and abs(line_spacing - 2.0) < 0.2
             ok_indent = abs(l_cm) < 0.1 and abs(f_cm) < 0.1 and abs(h_cm) < 0.1
+            ok_text = txt_head.upper() in ["ACRÓNIMOS", "ACRONIMOS"]
 
-            passed = ok_align and ok_size and ok_bold and ok_s_before and ok_s_after and ok_line and ok_indent
+            passed = ok_align and ok_size and ok_bold and ok_s_before and ok_s_after and ok_line and ok_indent and ok_text
             
             if not passed:
                 req_list = []
                 act_list = []
+                if not ok_text:
+                    req_list.append("Título 'ACRÓNIMOS'")
+                    act_list.append(f"'{txt_head}'")
                 if not ok_align:
                     req_list.append("Centrado")
                     act_list.append(self._align_display(align))
@@ -114,7 +118,7 @@ class AcronimosAuditor(BaseAuditor):
                     act_list.append(f"Sangría: izq {l_cm}cm")
 
                 self._add("Acrónimos", "Formato Cabecera ACRÓNIMOS", "error",
-                          "El título 'ACRÓNIMOS' debe estar centrado, en 16pt, en negrita, interlineado 2.0, con espaciado anterior 0pt y posterior 10pt, y sin sangría.",
+                          "El título de la sección debe ser exactamente 'ACRÓNIMOS' (no 'ÍNDICE DE ACRÓNIMOS'), estar centrado, en 16pt, en negrita, interlineado 2.0, con espaciado anterior 0pt y posterior 10pt, y sin sangría.",
                           ", ".join(req_list), ", ".join(act_list), p_idx=header_p['index'], p_text=txt_head)
             else:
                 self._add("Acrónimos", "Formato Cabecera ACRÓNIMOS", "passed", "Título 'ACRÓNIMOS' correcto.", "Correcto", "Correcto", p_idx=header_p['index'], p_text=txt_head)
@@ -126,7 +130,7 @@ class AcronimosAuditor(BaseAuditor):
             
             # --- Regla: No deben estar dentro de una tabla (sugerencia) ---
             if p.get('in_table', False):
-                self._add("Acrónimos", "Estructura Acrónimos (No Tabla)", "warning",
+                self._add("Acrónimos", "Estructura Acrónimos (No Tabla)", "error",
                           "Se recomienda que esta sección no esté redactada dentro de una tabla. "
                           "Los acrónimos y significados deben separarse mediante tabulaciones "
                           "en texto libre, no dentro de celdas de tabla.",
@@ -221,6 +225,6 @@ class AcronimosAuditor(BaseAuditor):
                     req_list.append("Francesa 3.75cm")
                     act_list.append(f"Francesa {h_cm}cm")
 
-                self._add("Acrónimos", "Formato de Párrafo de Acrónimo", "warning",
+                self._add("Acrónimos", "Formato de Párrafo de Acrónimo", "error",
                           f"Las entradas de acrónimos deben tener alineación izquierda, interlineado de {req_spacing_str} (ya que la lista tiene {total_acronyms} acrónimos), espaciado anterior y posterior de 0pt, sangría izquierda de 0cm y francesa de 3.75cm.",
                           ", ".join(req_list), ", ".join(act_list), p_idx=p_idx, p_text=txt)

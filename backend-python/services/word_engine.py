@@ -64,6 +64,7 @@ from services.auditors.ortografia import OrtografiaAuditor
 from services.auditors.numeracion_paginas import NumeracionPaginasAuditor
 from services.auditors.espaciado_titulos_contenido import EspaciadoTitulosContenidoAuditor
 from services.auditors.secuencia_tabla_figura import SecuenciaTablaFiguraAuditor
+from services.auditors.formula_nomenclatura import FormulaNomenclaturaAuditor
 
 # Palabras aproximadas por página en formato tesis
 _WORDS_PER_PAGE = 250
@@ -163,6 +164,7 @@ class WordAuditEngine:
             AutorizacionDepositoAuditor(self).audit()    # 📜 Autorización Depósito (OBLIGATORIO UNAP)
             EtiquetasJuradosAuditor(self).audit()      # 🏷️ Etiquetas Jurados
             AcronimosAuditor(self).audit()             # 🔠 Acrónimos
+            FormulaNomenclaturaAuditor(self).audit()   # 📐 Fórmulas y Nomenclatura
 
             return self._finalize()
         except Exception as e:
@@ -268,6 +270,7 @@ class WordAuditEngine:
         accumulated_words = 0
         current_page = 1
         page_words = 0
+        force_next_page = False  # True cuando el párrafo anterior tuvo un salto de página real
         current_section = "Inicio del Documento"
         in_index_zone = False
 
@@ -813,22 +816,42 @@ class WordAuditEngine:
                                 if not r.get('bold'):
                                     r['bold'] = True
 
-            # ── ESTIMACIÓN DE PÁGINA MEJORADA ──
-            # Basada exclusivamente en word-count con _WORDS_PER_PAGE calibrado
-            # para formato tesis UNAP (doble espacio, 12pt, A4 ≈ 250 palabras/página).
+            # ── ESTIMACIÓN DE PÁGINA HÍBRIDA ──
+            # Usa lastRenderedPageBreak como indicador primario de salto de página,
+            # y word-count como fallback para páginas sin marcadores explícitos.
             #
-            # NOTA: lastRenderedPageBreak NO se usa porque Word lo emite de forma
-            # poco fiable (múltiples marcadores en párrafos consecutivos, dentro
-            # de celdas de tabla, TOC, field codes, etc.), lo que infla artificial-
-            # mente el conteo. La estimación por palabras da resultados más
-            # consistentes incluso con documentos con muchas tablas/figuras.
-            page_words += word_count
-            if page_words >= _WORDS_PER_PAGE:
-                pages_to_add = page_words // _WORDS_PER_PAGE
-                current_page += pages_to_add
-                page_words = page_words % _WORDS_PER_PAGE
+            # lastRenderedPageBreak: Word lo inserta donde terminó una página al
+            # guardar. Es fiable cuando el documento no tiene cambios pendientes.
+            # Filtramos falsos positivos: ignoramos marcadores dentro de tablas,
+            # TOC fields, y párrafos de índice general para no inflar el conteo.
+            if force_next_page:
+                current_page += 1
+                page_words = 0
+                force_next_page = False
 
-            estimated_page = current_page
+            # Detectar saltos de página reales:
+            # - Explicit page break (<w:br w:type="page"/>) → el usuario lo puso
+            # - lastRenderedPageBreak → Word lo puso al renderizar
+            # Ambos indican que la página TERMINA en este párrafo;
+            # el siguiente párrafo arranca en la página +1.
+            is_reliable_break = has_page_break or has_real_page_marker
+            # Excluir falsos positivos dentro de tablas o TOC
+            if is_reliable_break and (in_table or is_in_toc):
+                is_reliable_break = False
+
+            if is_reliable_break:
+                force_next_page = True
+                # Este párrafo aún pertenece a la página actual
+                estimated_page = current_page
+                page_words = 0
+            else:
+                # Fallback: estimación por recuento de palabras
+                page_words += word_count
+                if page_words >= _WORDS_PER_PAGE:
+                    pages_to_add = page_words // _WORDS_PER_PAGE
+                    current_page += pages_to_add
+                    page_words = page_words % _WORDS_PER_PAGE
+                estimated_page = current_page
 
             # Determinar si es un título (manual o automático de Word)
             is_heading = False
@@ -1181,10 +1204,26 @@ class WordAuditEngine:
                 page = p_data.get("estimated_page")
             if section is None:
                 section = p_data.get("section")
+        # Helper to wrap text in markdown bold
+        def _bold(text: str) -> str:
+            s = str(text)
+            if not (s.startswith('**') and s.endswith('**')):
+                return f"**{s}**"
+            return s
+        # Helper to style label "Hallado:" and "Requerido:" as bold and 14pt using HTML
+        def _style_label(label: str) -> str:
+            # label includes colon, e.g., "Hallado:"
+            return f'<b style="font-size:14pt">{label}</b>'
+        # Apply styling to message
+        styled_msg = msg.replace("Hallado:", _style_label("Hallado:"))
+        styled_msg = styled_msg.replace("Requerido:", _style_label("Requerido:"))
         self.results.append({
-            "category": cat, "rule": rule, "status": status, "message": msg, 
-            "expected": str(expected), "actual": str(actual),
-            "paragraphIndex": p_idx, "paragraphText": p_text,
+            "category": cat, "rule": rule, "status": status,
+            "message": styled_msg,
+            "expected": _bold(expected),
+            "actual": _bold(actual),
+            "paragraphIndex": p_idx,
+            "paragraphText": p_text,
             "page": page,
             "section": section or "General",
         })

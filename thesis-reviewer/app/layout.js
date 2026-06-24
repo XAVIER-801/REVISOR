@@ -42,7 +42,7 @@ export default function RootLayout({ children }) {
             </nav>
 
             {/* ACTION BUTTON - RIGHT */}
-            <button className="btn-crypto" style={{ padding: '0.6rem 1.5rem', fontSize: '0.8rem', borderRadius: '12px' }}>Acceso VRI</button>
+            <a href="/admin" className="btn-crypto" style={{ padding: '0.6rem 1.5rem', fontSize: '0.8rem', borderRadius: '12px', textDecoration: 'none' }}>Acceso VRI</a>
           </div>
         </header>
 

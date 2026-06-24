@@ -41,6 +41,8 @@ class CapituloNivel345Auditor(BaseAuditor):
 
     def audit(self):
         for i, p in enumerate(self.paragraphs):
+            if p.get("in_table"):
+                continue
             if not p.get("is_in_body"):
                 continue
 
@@ -125,24 +127,7 @@ class CapituloNivel345Auditor(BaseAuditor):
                               f"El título de {level_label.lower()} debe tener alineación justificada o a la izquierda.",
                               "Justificada o Izquierda", self._align_display(align), p_idx=p['index'], p_text=txt)
 
-                # Interlineado
-                line_spacing = p.get('line_spacing')
-                if line_spacing is not None and abs(line_spacing - 2.0) > 0.2:
-                    self._add("Jerarquía", f"Interlineado Título {level_label}", "error",
-                              f"El título de {level_label.lower()} debe tener interlineado 2.0.",
-                              "2.0", str(line_spacing), p_idx=p['index'], p_text=txt)
 
-                # Espaciado
-                s_before = p.get('spacing_before', 0)
-                s_after = p.get('spacing_after', 0)
-                if s_before > 0.5:
-                    self._add("Jerarquía", f"Espaciado Anterior Título {level_label}", "error",
-                              f"El título de {level_label.lower()} debe tener espaciado anterior de 0pt.",
-                              "0pt", f"{s_before}pt", p_idx=p['index'], p_text=txt)
-                if abs(s_after - 10.0) > 0.5:
-                    self._add("Jerarquía", f"Espaciado Posterior Título {level_label}", "error",
-                              f"El título de {level_label.lower()} debe tener espaciado posterior de 10pt.",
-                              "10pt", f"{s_after}pt", p_idx=p['index'], p_text=txt)
 
                 # VALIDAR TILDES: "TÍTULO" con tilde (si contiene la palabra)
                 if "TITULO" in norm and "TÍTULO" not in txt:
@@ -200,7 +185,19 @@ class CapituloNivel345Auditor(BaseAuditor):
             if is_title:
                 continue
 
+
             # ═══ CONTENIDO bajo Nivel 3/4/5 ═══
+            # Bloques de aclaración de fórmulas ("Donde:"): solo auditar alineación,
+            # igual que el contenido normal del nivel padre. Omitir sangría y estilo de fuente.
+            if p.get('is_formula_explanation'):
+                # Debe cumplir la misma alineación que el contenido bajo el nivel padre: justificada
+                if align != 'both':
+                    self._add("Estructura", f"Alineación Aclaración de Fórmula ({level_label})", "error",
+                              f"Las líneas de aclaración de fórmula deben tener la misma alineación "
+                              f"que el contenido del {level_label.lower()}: Justificada.",
+                              "Justificada", self._align_display(align),
+                              p_idx=p['index'], p_text=txt[:40])
+                continue
             # Auditar TODOS los párrafos que no sean títulos, viñetas o notas
             if txt.upper().startswith("NOTA:") or txt.upper().startswith("FUENTE:"):
                 continue
@@ -220,22 +217,7 @@ class CapituloNivel345Auditor(BaseAuditor):
                           f"El contenido bajo {level_label.lower()} debe tener alineación justificada.",
                           "Justificada", self._align_display(align), p_idx=p['index'], p_text=txt[:40])
 
-            line_spacing = p.get('line_spacing')
-            if line_spacing is not None and abs(line_spacing - 2.0) > 0.2:
-                self._add("Estructura", f"Interlineado Contenido ({level_label})", "error",
-                          f"El contenido bajo {level_label.lower()} debe tener interlineado 2.0.",
-                          "2.0", str(line_spacing), p_idx=p['index'], p_text=txt[:40])
 
-            s_before = p.get('spacing_before', 0)
-            s_after = p.get('spacing_after', 0)
-            if s_before > 1.0:
-                self._add("Estructura", f"Espaciado Anterior Contenido ({level_label})", "error",
-                          f"El contenido bajo {level_label.lower()} DEBE tener espaciado anterior de 0pt.",
-                          "0pt", f"{s_before}pt", p_idx=p['index'], p_text=txt[:40])
-            if abs(s_after - 10.0) > 1.0:
-                self._add("Estructura", f"Espaciado Posterior Contenido ({level_label})", "error",
-                          f"El contenido bajo {level_label.lower()} DEBE tener espaciado posterior de 10pt.",
-                          "10pt", f"{s_after}pt", p_idx=p['index'], p_text=txt[:40])
 
             # Sangría del contenido
             effective_level = min(body_level, 5)

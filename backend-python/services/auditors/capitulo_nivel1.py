@@ -25,6 +25,8 @@ class CapituloNivel1Auditor(BaseAuditor):
 
     def audit(self):
         for i, p in enumerate(self.paragraphs):
+            if p.get("in_table"):
+                continue
             # Solo párrafos del cuerpo, bajo nivel 1, no en tabla/anexos/referencias
             if not p.get("is_in_body"):
                 continue
@@ -147,54 +149,24 @@ class CapituloNivel1Auditor(BaseAuditor):
                               "Sin sangría (0cm)", f"Sangría Izq: {l_cm}cm", p_idx=p['index'], p_text=txt)
 
                 # ═══ TAMAÑO Y ESPACIADO DIFERENCIADOS ═══
-                s_after = p.get('spacing_after', 0)
-                s_before = p.get('spacing_before', 0)
-                line_spacing = p.get('line_spacing')
-
                 if is_capitulo:
                     # CAPÍTULO I, II, III, IV → 16pt + posterior 5pt
                     if size and abs(size - 16) > 0.5:
                         self._add("Jerarquía", f"Tamaño Capítulo X: {txt[:20]}...", "error",
                                   f"La etiqueta 'CAPÍTULO X' debe ser de 16pt según la Guía UNAP.",
                                   "16pt", f"{size}pt", p_idx=p['index'], p_text=txt)
-                    if abs(s_after - 5.0) > 1.0:
-                        self._add("Jerarquía", f"Espaciado Posterior Capítulo: {txt[:20]}...", "error",
-                                  f"Después de 'CAPÍTULO X' debe haber espaciado posterior de 5pt (la Guía UNAP así lo indica).",
-                                  "5pt", f"{s_after}pt", p_idx=p['index'], p_text=txt)
-                    if s_before > 1.0:
-                        self._add("Jerarquía", f"Espaciado Anterior Capítulo: {txt[:20]}...", "error",
-                                  f"'CAPÍTULO X' debe tener espaciado anterior de 0pt.",
-                                  "0pt", f"{s_before}pt", p_idx=p['index'], p_text=txt)
                 elif es_titulo_capitulo:
                     # INTRODUCCIÓN, REVISIÓN DE LITERATURA, etc. → 14pt + posterior 10pt
                     if size and abs(size - 14) > 0.5:
                         self._add("Jerarquía", f"Tamaño Título del Capítulo: {txt[:20]}...", "error",
                                   f"El título del capítulo (INTRODUCCIÓN, REVISIÓN DE LITERATURA, etc.) debe ser de 14pt según la Guía UNAP.",
                                   "14pt", f"{size}pt", p_idx=p['index'], p_text=txt)
-                    if abs(s_after - 10.0) > 1.0:
-                        self._add("Jerarquía", f"Espaciado Posterior Título del Capítulo: {txt[:20]}...", "error",
-                                  f"El título del capítulo debe tener espaciado posterior de 10pt.",
-                                  "10pt", f"{s_after}pt", p_idx=p['index'], p_text=txt)
-                    if s_before > 1.0:
-                        self._add("Jerarquía", f"Espaciado Anterior Título del Capítulo: {txt[:20]}...", "error",
-                                  f"El título del capítulo debe tener espaciado anterior de 0pt.",
-                                  "0pt", f"{s_before}pt", p_idx=p['index'], p_text=txt)
                 elif es_seccion_final:
                     # V. CONCLUSIONES, VI. RECOMENDACIONES, VII. REFERENCIAS → 16pt + posterior 10pt
                     if size and abs(size - 16) > 0.5:
                         self._add("Jerarquía", f"Tamaño Sección Final: {txt[:20]}...", "error",
                                   f"La sección final (CONCLUSIONES, RECOMENDACIONES, REFERENCIAS) debe ser de 16pt.",
                                   "16pt", f"{size}pt", p_idx=p['index'], p_text=txt)
-                    if abs(s_after - 10.0) > 1.0:
-                        self._add("Jerarquía", f"Espaciado Posterior Sección Final: {txt[:20]}...", "error",
-                                  f"La sección final debe tener espaciado posterior de 10pt.",
-                                  "10pt", f"{s_after}pt", p_idx=p['index'], p_text=txt)
-
-                # Interlineado 2.0 para todos los títulos de nivel 1
-                if line_spacing and abs(line_spacing - 2.0) > 0.2:
-                    self._add("Jerarquía", f"Interlineado Título Nivel 1: {txt[:20]}...", "error",
-                              f"El título de nivel 1 debe tener interlineado 2.0.",
-                              "2.0", str(line_spacing), p_idx=p['index'], p_text=txt)
 
                 continue
 
@@ -207,6 +179,17 @@ class CapituloNivel1Auditor(BaseAuditor):
                 continue
 
             # ═══ CONTENIDO bajo Nivel 1 ═══
+            # Bloques de aclaración de fórmulas ("Donde:"): solo auditar alineación,
+            # igual que el contenido normal del nivel padre. Omitir sangría y estilo de fuente.
+            if p.get('is_formula_explanation'):
+                # Debe cumplir la misma alineación que el contenido bajo Nivel 1: justificada
+                if align != 'both':
+                    self._add("Estructura", "Alineación Aclaración de Fórmula (Nivel 1)", "error",
+                              "Las líneas de aclaración de fórmula deben tener la misma alineación "
+                              "que el contenido del nivel 1: Justificada.",
+                              "Justificada", self._align_display(align),
+                              p_idx=p['index'], p_text=txt[:40])
+                continue
             # Aumentar umbral de longitud mínima para evitar falsos positivos
             if len(txt) <= 80:
                 continue
@@ -227,26 +210,7 @@ class CapituloNivel1Auditor(BaseAuditor):
                           "El contenido bajo nivel 1 debe tener alineación justificada.",
                           "Justificada", self._align_display(align), p_idx=p['index'], p_text=txt[:40])
 
-            # Interlineado
-            line_spacing = p.get('line_spacing')
-            if line_spacing is not None and abs(line_spacing - 2.0) > 0.2:
-                self._add("Estructura", "Interlineado Contenido (Nivel 1)", "error",
-                          "El contenido bajo nivel 1 debe tener interlineado 2.0.",
-                          "2.0", str(line_spacing), p_idx=p['index'], p_text=txt[:40])
 
-            # Espaciado
-            s_before = p.get('spacing_before', 0)
-            s_after = p.get('spacing_after', 0)
-            if s_before > 3.0:  # Tolerar hasta 3pt (Word usa valores ligeramente distintos de 0)
-                self._add("Estructura", "Espaciado Anterior Contenido (Nivel 1)", "error",
-                          "El contenido bajo nivel 1 DEBE tener espaciado anterior de 0pt.",
-                          "0pt", f"{s_before}pt", p_idx=p['index'], p_text=txt[:40])
-            # Tolerar un rango de 8-12pt o 0pt (Muchas tesis correctas usan 0pt o 12pt)
-            is_after_ok = (abs(s_after - 0.0) <= 1.0) or (8.0 <= s_after <= 12.0)
-            if not is_after_ok:
-                self._add("Estructura", "Espaciado Posterior Contenido (Nivel 1)", "error",
-                          "El contenido bajo nivel 1 DEBE tener espaciado posterior de 10pt (se tolera 8-12pt o 0pt).",
-                          "10pt (o 0pt / 8-12pt)", f"{s_after}pt", p_idx=p['index'], p_text=txt[:40])
 
             # Sangría: Izq 0cm, Primera Línea 1.25cm
             ok_l = abs(l_cm - 0.0) <= 0.1

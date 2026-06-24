@@ -136,30 +136,18 @@ class VinetasAuditor(BaseAuditor):
                           "Las viñetas deben tener alineación justificada.",
                           "Justificada", self._align_display(align), p_idx=p['index'], p_text=txt)
 
-            line_spacing = p.get('line_spacing')
-            if line_spacing is not None and abs(line_spacing - 2.0) > 0.2:
-                self._add("Viñetas", "Interlineado Viñeta", "error",
-                          "Las viñetas deben tener interlineado 2.0.",
-                          "2.0", str(line_spacing), p_idx=p['index'], p_text=txt)
-
-            # 2. Spacing
-            s_before = p.get('spacing_before', 0)
-            s_after = p.get('spacing_after', 0)
-            if s_before > 1.0:
-                self._add("Viñetas", "Espaciado Anterior Viñeta", "warning",
-                          "Las viñetas deben tener espaciado anterior de 0pt.",
-                          "0pt", f"{s_before}pt", p_idx=p['index'], p_text=txt)
-
+            # 2. Espaciado Posterior (0pt intermedia, 10pt última)
+            space_after = p.get('spacing_after', 0)
             if is_last_bullet:
-                if abs(s_after - 10.0) > 2.0:
+                if space_after != 10:
                     self._add("Viñetas", "Espaciado Posterior Última Viñeta", "error",
-                              "La última viñeta del bloque DEBE tener espaciado posterior de 10pt obligatoriamente.",
-                              "10pt", f"{s_after}pt", p_idx=p['index'], p_text=txt)
+                              "La última viñeta de un bloque debe tener espaciado posterior de 10pt.",
+                              "10pt", f"{space_after}pt", p_idx=p['index'], p_text=txt)
             else:
-                if s_after > 1.0:
-                    self._add("Viñetas", "Espaciado Posterior Viñeta", "error",
+                if space_after != 0:
+                     self._add("Viñetas", "Espaciado Posterior Viñeta Intermedia", "warning",
                               "Las viñetas intermedias deben tener espaciado posterior de 0pt.",
-                              "0pt", f"{s_after}pt", p_idx=p['index'], p_text=txt)
+                              "0pt", f"{space_after}pt", p_idx=p['index'], p_text=txt)
 
             # 3. Indents (misma sangría para viñetas y sub-viñetas)
             if current_level in [1, 2]:
@@ -253,6 +241,9 @@ class VinetasAuditor(BaseAuditor):
 
         RECHAZA explícitamente: ➢, ❑, ✓, ●, ○, y otros símbolos decorativos
         """
+        if p.get('is_heading', False):
+            return False, True, ''
+
         txt_strip = txt.strip()
 
         is_bullet = False
@@ -350,10 +341,16 @@ class VinetasAuditor(BaseAuditor):
                 # Viñeta con guion o punto
                 is_dash_or_dot = (first_char in allowed_single_chars and len(txt_strip) > 1 and txt_strip[1] in [' ', '\t'])
 
-                # Solo es viñeta si cumple ALGUNA de estas condiciones Y tiene sangría francesa
-                if (is_dash_or_dot or is_alphanumeric) and h_cm > 0.3:
+                # Viñeta con guion/punto: el patrón (primer char + espacio/tab) es suficientemente
+                # específico → no requiere sangría francesa. Para alfanuméricas (a), 1)), sí
+                # se exige sangría para no confundir con títulos numerados.
+                if is_dash_or_dot:
                     is_bullet = True
                     is_symbol_ok = True
-                    detected_symbol = first_char if is_dash_or_dot else alphanumeric_match.group(1)[0]
+                    detected_symbol = first_char
+                elif is_alphanumeric and h_cm > 0.3:
+                    is_bullet = True
+                    is_symbol_ok = True
+                    detected_symbol = alphanumeric_match.group(1)[0]
 
         return is_bullet, is_symbol_ok, detected_symbol

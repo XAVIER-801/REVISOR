@@ -1,3 +1,10 @@
+networks:
+  revisor-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
 services:
   # Frontend - Interfaz de Usuario
   revisor-web:
@@ -9,9 +16,13 @@ services:
       - "3005:3000"
     environment:
       - NODE_ENV=production
-      - PYTHON_API_URL=http://revisor-api:8000
+      - PYTHON_API_URL=http://172.30.0.10:8000
+    env_file:
+      - ./thesis-reviewer/.env.local
     depends_on:
       - revisor-api
+    networks:
+      - revisor-net
     restart: always
 
   # Backend - Motor Experto de Python
@@ -24,7 +35,10 @@ services:
       - "8005:8000"
     volumes:
       - ./backend-python/tmp_uploads:/app/tmp_uploads
+      - ./backend-python/services/auditors:/app/services/auditors
+    env_file:
+      - ./thesis-reviewer/.env.local
+    networks:
+      revisor-net:
+        ipv4_address: 172.30.0.10
     restart: always
-
-volumes:
-  ocr_data:

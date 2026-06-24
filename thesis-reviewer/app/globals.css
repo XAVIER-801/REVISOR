@@ -360,7 +360,6 @@ body {
   transition: 0.3s;
 }
 
-.preview-item.status-passed { border-left-color: var(--success); }
 .preview-item.status-error { border-left-color: var(--error); }
 .preview-item.status-warning { border-left-color: var(--warning); }
 

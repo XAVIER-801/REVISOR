@@ -27,6 +27,8 @@ class CapituloNivel2Auditor(BaseAuditor):
 
     def audit(self):
         for i, p in enumerate(self.paragraphs):
+            if p.get("in_table"):
+                continue
             if not p.get("is_in_body"):
                 continue
             if p.get("body_level") != 2:
@@ -107,24 +109,7 @@ class CapituloNivel2Auditor(BaseAuditor):
                               "El título de nivel 2 debe tener alineación justificada o alineado a la izquierda.",
                               "Justificada o Izquierda", self._align_display(align), p_idx=p['index'], p_text=txt)
 
-                # Interlineado
-                line_spacing = p.get('line_spacing')
-                if line_spacing is not None and abs(line_spacing - 2.0) > 0.2:
-                    self._add("Jerarquía", "Interlineado Título Nivel 2", "error",
-                              "El título de nivel 2 debe tener interlineado 2.0.",
-                              "2.0", str(line_spacing), p_idx=p['index'], p_text=txt)
 
-                # Espaciado
-                s_before = p.get('spacing_before', 0)
-                s_after = p.get('spacing_after', 0)
-                if s_before > 1.0:
-                    self._add("Jerarquía", "Espaciado Anterior Título Nivel 2", "error",
-                              "El título de nivel 2 debe tener espaciado anterior de 0pt.",
-                              "0pt", f"{s_before}pt", p_idx=p['index'], p_text=txt)
-                if abs(s_after - 10.0) > 1.0:
-                    self._add("Jerarquía", "Espaciado Posterior Título Nivel 2", "error",
-                              "El título de nivel 2 debe tener espaciado posterior de 10pt.",
-                              "10pt", f"{s_after}pt", p_idx=p['index'], p_text=txt)
 
                 # VALIDAR TILDES: "TÍTULO" con tilde (si contiene la palabra)
                 if "TITULO" in norm and "TÍTULO" not in txt:
@@ -166,6 +151,17 @@ class CapituloNivel2Auditor(BaseAuditor):
                 continue
 
             # ═══ CONTENIDO bajo Nivel 2 ═══
+            # Bloques de aclaración de fórmulas ("Donde:"): solo auditar alineación,
+            # igual que el contenido normal del nivel padre. Omitir sangría y estilo de fuente.
+            if p.get('is_formula_explanation'):
+                # Debe cumplir la misma alineación que el contenido bajo Nivel 2: justificada
+                if align != 'both':
+                    self._add("Estructura", "Alineación Aclaración de Fórmula (Nivel 2)", "error",
+                              "Las líneas de aclaración de fórmula deben tener la misma alineación "
+                              "que el contenido del nivel 2: Justificada.",
+                              "Justificada", self._align_display(align),
+                              p_idx=p['index'], p_text=txt[:40])
+                continue
             if len(txt) <= 50:
                 continue
             if txt.upper().startswith("NOTA:") or txt.upper().startswith("FUENTE:"):
@@ -184,21 +180,7 @@ class CapituloNivel2Auditor(BaseAuditor):
                           "Justificada", self._align_display(align), p_idx=p['index'], p_text=txt[:40])
 
             line_spacing = p.get('line_spacing')
-            if line_spacing is not None and abs(line_spacing - 2.0) > 0.2:
-                self._add("Estructura", "Interlineado Contenido (Nivel 2)", "error",
-                          "El contenido bajo nivel 2 debe tener interlineado 2.0.",
-                          "2.0", str(line_spacing), p_idx=p['index'], p_text=txt[:40])
 
-            s_before = p.get('spacing_before', 0)
-            s_after = p.get('spacing_after', 0)
-            if s_before > 1.0:
-                self._add("Estructura", "Espaciado Anterior Contenido (Nivel 2)", "error",
-                          "El contenido bajo nivel 2 DEBE tener espaciado anterior de 0pt.",
-                          "0pt", f"{s_before}pt", p_idx=p['index'], p_text=txt[:40])
-            if abs(s_after - 10.0) > 1.0:
-                self._add("Estructura", "Espaciado Posterior Contenido (Nivel 2)", "error",
-                          "El contenido bajo nivel 2 DEBE tener espaciado posterior de 10pt.",
-                          "10pt", f"{s_after}pt", p_idx=p['index'], p_text=txt[:40])
 
             # Sangría: Izq 0cm, Primera Línea 1.25cm
             ok_l = abs(l_cm - 0.0) <= 0.1

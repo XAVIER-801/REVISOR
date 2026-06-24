@@ -8,4 +8,6 @@ python-dotenv
 lxml
 spacy
 pillow
+groq
+supabase>=2.0.0
 # google-generativeai (NO USAR - SEGÚN SOLICITUD DE USUARIO)

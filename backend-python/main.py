@@ -23,15 +23,20 @@ import base64
 import uuid
 import asyncio
 import time
+import threading
 from typing import Dict
+from dotenv import load_dotenv
 from services.word_engine import WordAuditEngine
 from services.docx_annotator import DocxAnnotator
+
+load_dotenv()  # Carga backend-python/.env
 
 # ── ai_engine: carga OPCIONAL ──
 try:
     from ai_engine.scanned_auditor import ScannedAuditor
     from ai_engine.learning_system import LearningSystem
     from ai_engine.knowledge_base import KnowledgeBase
+    from ai_engine.groq_assistant import GroqAssistant
     AI_ENGINE_AVAILABLE = True
 except Exception as _e:
     print(f"ℹ️  ai_engine no disponible (opcional): {_e}")
@@ -47,7 +52,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-UPLOAD_DIR = "/tmp/audit_uploads"
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "tmp_uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # ── Cola de procesamiento (en memoria) ──────────────────────────────────
@@ -66,24 +71,108 @@ def _cleanup_old_tasks():
             TASKS.pop(tid, None)
 
 
+def _save_audit_to_supabase_worker(filename: str, audit_result: dict):
+    """Worker que persiste en Supabase (se ejecuta en un hilo separado, no bloquea)."""
+    try:
+        from ai_engine.supabase_client import get_supabase_client
+        supabase = get_supabase_client()
+        if not supabase:
+            print("[Supabase] ⚠️ No configurado — omitiendo guardado.")
+            return
+
+        stats = audit_result.get("stats", {})
+        all_results = audit_result.get("results", [])
+
+        # Snapshot resumido (solo errores y warnings, máx 200 para no saturar)
+        snapshot_items = [r for r in all_results if r.get("status") in ("error", "warning")]
+        original_snapshot = [
+            {"rule": r["rule"], "category": r["category"], "status": r["status"],
+             "severity": r.get("severity", r["status"]),
+             "actual": str(r.get("actual", ""))[:200],
+             "expected": str(r.get("expected", ""))[:200]}
+            for r in snapshot_items[:200]
+        ]
+
+        thesis_data = {
+            "filename": filename,
+            "score": stats.get("score", 0),
+            "errors_count": stats.get("errors", 0),
+            "warnings_count": stats.get("warnings", 0),
+            "passed_count": stats.get("passed", 0),
+            "status": "pending_review",
+            "annotated_docx_base64": audit_result.get("annotatedBase64"),
+            "original_results_snapshot": original_snapshot,
+        }
+
+        resp = supabase.table("thesis_audits").insert(thesis_data).execute()
+        if not resp.data:
+            print("[Supabase] ❌ Error insertando thesis_audit")
+            return
+        thesis_id = resp.data[0]["id"]
+        print(f"[Supabase] ✅ Tesis guardada: {thesis_id}")
+
+        # Guardar observaciones (máx 500, en lotes de 100)
+        obs_to_save = [
+            {
+                "thesis_id": thesis_id,
+                "rule": r.get("rule", ""),
+                "category": r.get("category", ""),
+                "severity": r.get("severity", r["status"]),
+                "message": r.get("message", ""),
+                "expected": str(r.get("expected", ""))[:500] if r.get("expected") else None,
+                "actual": str(r.get("actual", ""))[:500] if r.get("actual") else None,
+                "paragraph_index": r.get("paragraphIndex"),
+                "paragraph_text": str(r.get("paragraphText", ""))[:1000] if r.get("paragraphText") else None,
+                "status": "pending",
+            }
+            for r in snapshot_items[:500]
+        ]
+
+        # Insertar en lotes de 100
+        batch_size = 100
+        for i in range(0, len(obs_to_save), batch_size):
+            batch = obs_to_save[i:i + batch_size]
+            try:
+                supabase.table("thesis_observations").insert(batch).execute()
+            except Exception as batch_err:
+                print(f"[Supabase] ⚠️ Error en lote {i//batch_size + 1}: {batch_err}")
+
+        print(f"[Supabase] ✅ {len(obs_to_save)} observaciones guardadas para {thesis_id}")
+
+    except Exception as e:
+        import traceback
+        print(f"[Supabase] ❌ Error inesperado: {e}")
+        traceback.print_exc()
+
+
+def save_audit_to_supabase(filename: str, audit_result: dict):
+    """Lanza el guardado en Supabase en un hilo background para no bloquear la respuesta."""
+    t = threading.Thread(
+        target=_save_audit_to_supabase_worker,
+        args=(filename, audit_result),
+        daemon=True,
+    )
+    t.start()
+
+
 def _run_audit_pipeline(file_path: str, filename: str) -> dict:
     """Pipeline completo de auditoría. Reutilizable por endpoints sync y async."""
     engine = WordAuditEngine(file_path)
     audit_results = engine.run_audit()
 
-    # OCR opcional
-    if AI_ENGINE_AVAILABLE:
-        try:
-            scanned = ScannedAuditor(engine.working_path)
-            ocr_results = scanned.audit()
-            if ocr_results:
-                audit_results.setdefault("results", []).extend(ocr_results)
-                new_errors = sum(1 for r in ocr_results if r.get("status") == "error")
-                new_warnings = sum(1 for r in ocr_results if r.get("status") == "warning")
-                audit_results["stats"]["errors"] += new_errors
-                audit_results["stats"]["warnings"] += new_warnings
-        except Exception as e:
-            print(f"ℹ️  OCR opcional no ejecutado: {e}")
+    # OCR opcional temporalmente desactivado para evitar demoras de 200s
+    # if AI_ENGINE_AVAILABLE:
+    #     try:
+    #         scanned = ScannedAuditor(engine.working_path)
+    #         ocr_results = scanned.audit()
+    #         if ocr_results:
+    #             audit_results.setdefault("results", []).extend(ocr_results)
+    #             new_errors = sum(1 for r in ocr_results if r.get("status") == "error")
+    #             new_warnings = sum(1 for r in ocr_results if r.get("status") == "warning")
+    #             audit_results["stats"]["errors"] += new_errors
+    #             audit_results["stats"]["warnings"] += new_warnings
+    #     except Exception as e:
+    #         print(f"ℹ️  OCR opcional no ejecutado: {e}")
 
     # Anotación
     annotated_base64 = None
@@ -106,21 +195,34 @@ def _run_audit_pipeline(file_path: str, filename: str) -> dict:
             ls = LearningSystem()
             ls.ingest(audit_results, metadata)
             suggestions = ls.suggest_improvements(audit_results, metadata)
+            
+            # Post-procesamiento con Asistente IA Groq (opcional)
+            groq = GroqAssistant()
+            if groq.is_available():
+                print("Iniciando revisión inteligente con Groq...")
+                audit_results = groq.review_observations(audit_results)
+                
         except Exception as e:
-            print(f"ℹ️  Sistema de aprendizaje opcional: {e}")
+            print(f"Sistema de aprendizaje/asistente opcional: {e}")
 
-    # Limpieza
-    if annotator_path and os.path.exists(annotator_path):
-        os.remove(annotator_path)
-    if engine.working_path != file_path and os.path.exists(engine.working_path):
-        os.remove(engine.working_path)
-
-    return {
+    # Construir respuesta
+    result_dict = {
         **audit_results,
         "annotatedBase64": annotated_base64,
         "engine": "python-hifi",
         "ai_suggestions": suggestions,
     }
+
+    # Limpieza de archivos temporales ANTES de guardar en Supabase
+    if annotator_path and os.path.exists(annotator_path):
+        os.remove(annotator_path)
+    if engine.working_path != file_path and os.path.exists(engine.working_path):
+        os.remove(engine.working_path)
+
+    # Persistencia en Supabase en background (no bloquea la respuesta al frontend)
+    save_audit_to_supabase(filename, result_dict)
+
+    return result_dict
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -320,8 +422,146 @@ async def stats_top_errors(n: int = 20):
 
 
 # ══════════════════════════════════════════════════════════════════════
-# HEALTH CHECK
+# ENDPOINTS DEL ASISTENTE GROQ
 # ══════════════════════════════════════════════════════════════════════
+
+from pydantic import BaseModel
+
+class CorrectionReq(BaseModel):
+    type: str  # "corrections", "false_positives", "clarifications"
+    issue: str
+    fix: str
+    rule_affected: str = ""
+
+@app.post("/ai/learn")
+async def ai_learn(correction: CorrectionReq):
+    """Enseña al asistente IA una corrección o regla para futuras auditorías."""
+    _ai_required()
+    groq = GroqAssistant()
+    
+    data = {
+        "issue": correction.issue,
+        "fix": correction.fix,
+        "rule_affected": correction.rule_affected
+    }
+    
+    success = groq.learn_from_correction(correction.type, data)
+    if not success:
+        raise HTTPException(status_code=400, detail="Tipo de corrección inválido (debe ser: corrections, false_positives o clarifications)")
+        
+    return {"status": "success", "message": "Memoria de IA actualizada"}
+
+@app.get("/ai/memory")
+async def ai_memory():
+    """Ver el estado actual de la memoria del asistente IA."""
+    _ai_required()
+    groq = GroqAssistant()
+    return groq.get_memory()
+
+
+# ══════════════════════════════════════════════════════════════════════
+# ENDPOINTS DEL AUTOFIXER (IA)
+# ══════════════════════════════════════════════════════════════════════
+
+@app.on_event("startup")
+async def startup_auto_fix():
+    """Al arrancar el servidor, si hay feedback pendiente, lanza el AutoFixer en background."""
+    if AI_ENGINE_AVAILABLE:
+        import asyncio
+        asyncio.create_task(_run_autofix_background())
+
+async def _run_autofix_background():
+    import asyncio
+    await asyncio.sleep(10)  # Espera 10s que el server termine de iniciar
+    try:
+        from ai_engine.auto_fixer import AutoFixer
+        fixer = AutoFixer()
+        result = fixer.run()
+        if "error" not in result:
+            print(f"[STARTUP AutoFixer] {result.get('applied', 0)} mejoras aplicadas, {result.get('reverted', 0)} revertidas.")
+        else:
+            print(f"[STARTUP AutoFixer] Error: {result['error']}")
+    except Exception as e:
+        print(f"[STARTUP AutoFixer] Exception: {e}")
+
+@app.post("/ai/autofix/run")
+async def run_autofix():
+    """Ejecuta el AutoFixer manualmente. Solo disponible mientras el servidor está activo."""
+    _ai_required()
+    try:
+        from ai_engine.auto_fixer import AutoFixer
+        fixer = AutoFixer()
+        result = fixer.run()
+        if "error" in result:
+             raise HTTPException(status_code=500, detail=result["error"])
+        return {
+            "fixes_applied": result.get('applied', 0),
+            "fixes_reverted": result.get('reverted', 0),
+            "fixes_pending_retry": result.get('retrying', 0),
+            "fixes_manual_review": result.get('manual_review', 0),
+            "details": result.get('details', [])
+        }
+    except Exception as e:
+         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/ai/autofix/history")
+async def autofix_history(limit: int = 50):
+    """Historial de cambios de código automáticos desde Supabase."""
+    _ai_required()
+    from ai_engine.supabase_client import get_supabase_client
+    supabase = get_supabase_client()
+    if not supabase:
+        return {"history": []}
+    try:
+        resp = supabase.table("ai_code_fixes")\
+            .select("*")\
+            .order("created_at", desc=True)\
+            .limit(limit)\
+            .execute()
+        return {"history": resp.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ══════════════════════════════════════════════════════════════════════
+# DIAGNÓSTICO
+# ══════════════════════════════════════════════════════════════════════
+
+@app.get("/debug/supabase")
+async def debug_supabase():
+    """Verifica la conexión a Supabase y muestra las variables de entorno."""
+    from ai_engine.supabase_client import get_supabase_client
+    
+    url = os.getenv("SUPABASE_URL") or "(no configurado)"
+    key_preview = (os.getenv("SUPABASE_ANON_KEY") or "None")[:12] + "..." if os.getenv("SUPABASE_ANON_KEY") else "None"
+    
+    supabase = get_supabase_client()
+    if not supabase:
+        return {
+            "connected": False,
+            "supabase_url": url,
+            "supabase_key": key_preview,
+            "env_file_loaded": True,
+            "error": "No se pudo crear el cliente. Verifica las credenciales en backend-python/.env",
+        }
+    
+    try:
+        resp = supabase.table("thesis_audits").select("count", count="exact").limit(0).execute()
+        return {
+            "connected": True,
+            "supabase_url": url,
+            "supabase_key": key_preview,
+            "table_thesis_audits": "existe",
+            "total_audits": resp.count,
+        }
+    except Exception as e:
+        return {
+            "connected": True,
+            "supabase_url": url,
+            "supabase_key": key_preview,
+            "table_thesis_audits": f"error: {e}",
+            "suggestion": "Ejecuta el script supabase-schema.sql en Supabase SQL Editor para crear las tablas",
+        }
+
 
 @app.get("/health")
 async def health():

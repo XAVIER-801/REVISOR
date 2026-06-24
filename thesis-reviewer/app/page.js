@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { 
   Upload, FileText, CheckCircle, AlertCircle, XCircle, 
   RotateCcw, Download, Layout, Type, AlignLeft, 
@@ -20,16 +20,61 @@ export default function Home() {
   const [activeFilter, setActiveFilter] = useState('all');
   const [showPreview, setShowPreview] = useState(false);
   const [viewMode, setViewMode] = useState('dashboard'); // 'dashboard', 'table', 'preview'
+  const [elapsedTime, setElapsedTime] = useState(0);
 
-  const getCategoryStats = () => {
-    if (!results) return [];
-    const categories = [...new Set(results.results.map(r => r.category || 'Otros'))];
-    return categories.map(cat => {
-      const items = results.results.filter(r => r.category === cat);
-      const passed = items.filter(r => r.status === 'passed').length;
-      const total = items.length;
-      const score = Math.round((passed / total) * 100);
-      return { name: cat, score, total, passed, status: score >= 80 ? 'passed' : score >= 50 ? 'warning' : 'error' };
+  useEffect(() => {
+    let timer;
+    if (uploading) {
+      timer = setInterval(() => {
+        setElapsedTime(prev => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [uploading]);
+
+  const getLoadingMessage = () => {
+    if (elapsedTime < 3) return "Extrayendo contenido del documento...";
+    if (elapsedTime < 7) return "Analizando estructura y configuración de página...";
+    if (elapsedTime < 13) return "Auditando niveles de títulos y formato de párrafos...";
+    if (elapsedTime < 18) return "Revisando tablas, figuras y ortografía...";
+    if (elapsedTime < 26) return "Verificando observaciones con Inteligencia Artificial...";
+    if (elapsedTime < 35) return "Filtrando falsos positivos y generando resumen...";
+    return "Consolidando documento anotado. ¡Ya casi listo!...";
+  };
+
+  const getGroupedStats = () => {
+    if (!results || !results.results) return [];
+    
+    const groupedData = [
+      { name: 'Estructura y Capítulos', total: 0, passed: 0 },
+      { name: 'Formato de Contenido', total: 0, passed: 0 },
+      { name: 'Tablas y Figuras', total: 0, passed: 0 },
+      { name: 'Redacción y Estilo', total: 0, passed: 0 }
+    ];
+
+    results.results.forEach(r => {
+      const cat = (r.category || '').toLowerCase();
+      // Ignorar categorías secundarias en las tarjetas (siguen saliendo en la tabla)
+      if (cat.includes('ocr') || cat.includes('jurado') || cat.includes('anexo') || cat.includes('preliminar') || cat.includes('cuadro') || cat.includes('acrónimo') || cat.includes('portada')) return;
+
+      let groupIndex = 1; // 1: Formato (por defecto)
+      if (cat.includes('nivel') || cat.includes('jerarquía') || cat.includes('viñeta') || cat.includes('capítulo') || cat.includes('índice')) {
+        groupIndex = 0;
+      } else if (cat.includes('tabla') || cat.includes('figura')) {
+        groupIndex = 2;
+      } else if (cat.includes('estilo') || cat.includes('ortografía') || cat.includes('escritura') || cat.includes('redacción')) {
+        groupIndex = 3;
+      }
+
+      groupedData[groupIndex].total++;
+      if (r.status === 'passed' || r.ai_rejected === true) {
+        groupedData[groupIndex].passed++;
+      }
+    });
+
+    return groupedData.filter(g => g.total > 0).map(g => {
+      const score = Math.round((g.passed / g.total) * 100);
+      return { ...g, score, status: score >= 80 ? 'passed' : score >= 50 ? 'warning' : 'error' };
     });
   };
 
@@ -38,6 +83,7 @@ export default function Home() {
   const uploadFile = async (fileToUpload) => {
     if (!fileToUpload) return;
     setUploading(true);
+    setElapsedTime(0);
     setError(null);
     try {
       const formData = new FormData();
@@ -150,13 +196,24 @@ export default function Home() {
 
   if (uploading) {
     return (
-      <main className="container-crypto flex items-center justify-center py-40 animate-reveal">
-         <div className="card-elite max-w-lg w-full text-center py-24">
-            <div className="w-40 h-40 border-4 border-white/5 border-t-accent rounded-full animate-spin mx-auto mb-12 shadow-[0_0_60px_rgba(69,245,229,0.3)]"></div>
-            <h2 className="text-4xl font-black tracking-tighter">Analizando Bloque...</h2>
-            <div className="flex justify-center gap-3 mt-10">
+      <main className="container-crypto flex items-center justify-center py-40 animate-reveal" style={{ minHeight: '100vh' }}>
+         <div className="card-elite max-w-lg w-full text-center py-16 px-10">
+            <div className="w-32 h-32 border-4 border-white/5 border-t-accent rounded-full animate-spin mx-auto mb-10 shadow-[0_0_60px_rgba(69,245,229,0.3)] flex items-center justify-center">
+               <span style={{ fontSize: '1.5rem', fontWeight: 900, color: 'white', transform: 'rotate(-360deg)', display: 'block', animation: 'spin 1s linear infinite reverse' }}>
+                 {elapsedTime}s
+               </span>
+            </div>
+            <h2 className="text-3xl font-black tracking-tighter mb-4 text-white">Analizando Tesis</h2>
+            
+            <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', marginBottom: '1.5rem' }}>
+              <div style={{ fontSize: '0.9rem', color: '#94A3B8', fontWeight: 600, minHeight: '1.5rem' }}>
+                 {getLoadingMessage()}
+              </div>
+            </div>
+
+            <div className="flex justify-center gap-3">
                <div className="ocr-pulse"></div>
-               <span className="text-xs font-bold text-accent uppercase tracking-wider">Se está revisando el formato de su Tesis, sea paciente por favor</span>
+               <span className="text-xs font-bold text-accent uppercase tracking-wider">Por favor, no cierre esta ventana</span>
             </div>
          </div>
        </main>
@@ -171,10 +228,7 @@ export default function Home() {
        <div className="container-crypto">
           {/* HEADER PANEL */}
           <div className="header-panel flex-between">
-             <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                <button onClick={() => setResults(null)} className="w-12 h-12 flex items-center justify-center bg-white/5 rounded-xl text-slate-400 hover:text-white border border-white/10 transition-all">
-                   <RotateCcw size={20} />
-                </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                 <div>
                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--accent)', fontSize: '0.65rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.3em', marginBottom: '0.4rem' }}>
                       <Activity size={14} /> Auditoría Finalizada
@@ -213,6 +267,9 @@ export default function Home() {
                     <Eye size={16} style={{ marginBottom: '-3px', marginRight: '6px' }} /> Preview
                   </button>
                 </div>
+                <button onClick={() => setResults(null)} className="btn-crypto" style={{ background: 'transparent', border: '1px solid rgba(255, 255, 255, 0.2)', color: 'white' }}>
+                    <RotateCcw size={20} /> Nueva Auditoría
+                </button>
                 <button onClick={handleDownload} className="btn-crypto">
                     <Download size={20} /> Descargar Reporte
                 </button>
@@ -224,26 +281,27 @@ export default function Home() {
              {/* SIDEBAR */}
              <aside>
                 <div className="sidebar-summary shadow-2xl">
-                   <div className="score-circle-wrap">
-                      <svg width="180" height="180" viewBox="0 0 180 180" style={{ transform: 'rotate(-90deg)' }}>
-                         <circle cx="90" cy="90" r="80" stroke="rgba(255,255,255,0.05)" strokeWidth="10" fill="transparent" />
-                         <circle cx="90" cy="90" r="80" stroke="var(--accent)" strokeWidth="10" fill="transparent" strokeDasharray="502.6" strokeDashoffset={502.6 * (1 - results.score / 100)} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 1s ease-out' }} />
+                   <div className="score-circle-wrap" style={{ position: 'relative', margin: '0 auto 2.5rem', width: '220px', height: '220px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                      <div style={{ position: 'absolute', width: '100%', height: '100%', borderRadius: '50%', background: results.score >= 80 ? 'transparent' : results.score >= 60 ? 'var(--warning)' : 'var(--error)', filter: 'blur(40px)', opacity: 0.15 }}></div>
+                      <svg width="220" height="220" viewBox="0 0 220 220" style={{ transform: 'rotate(-90deg)', position: 'absolute', zIndex: 5 }}>
+                         <circle cx="110" cy="110" r="100" stroke="rgba(255,255,255,0.05)" strokeWidth="12" fill="transparent" />
+                         <circle cx="110" cy="110" r="100" stroke={results.score >= 80 ? 'var(--text-main)' : results.score >= 60 ? 'var(--warning)' : 'var(--error)'} strokeWidth="12" fill="transparent" strokeDasharray="628.3" strokeDashoffset={628.3 * (1 - results.score / 100)} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1)' }} />
                       </svg>
-                      <div className="score-text">
-                         <div style={{ fontSize: '3.5rem', fontWeight: 900, lineHeight: '1', color: 'white' }}>{results.score}</div>
-                         <div style={{ fontSize: '0.6rem', fontWeight: 900, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.2em' }}>Puntaje</div>
+                      <div className="score-text" style={{ position: 'absolute', textAlign: 'center', zIndex: 10 }}>
+                         <div style={{ fontSize: '5rem', fontWeight: 900, lineHeight: '1', color: 'white', textShadow: `0 0 20px ${results.score >= 80 ? 'transparent' : results.score >= 60 ? 'var(--warning)' : 'var(--error)'}60` }}>{results.score}</div>
+                         <div style={{ fontSize: '0.75rem', fontWeight: 900, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.25em', marginTop: '0.5rem' }}>Puntaje Global</div>
                       </div>
                    </div>
 
                    <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-                      <span className={`badge ${results.score >= 80 ? 'badge-success' : results.score >= 60 ? 'badge-warning' : 'badge-error'}`}>
+                      <span className={`badge ${results.score >= 80 ? '' : results.score >= 60 ? 'badge-warning' : 'badge-error'}`}>
                          {results.score >= 80 ? 'Excelente' : results.score >= 60 ? 'Aceptable' : 'Estado Crítico'}
                       </span>
                    </div>
 
                    <div className="stats-list">
                       {[
-                        { label: "Validaciones OK", val: results.passedCount, color: "var(--success)", bg: "rgba(69, 245, 229, 0.05)", icon: <CheckCircle size={16}/> },
+                        { label: "Validaciones OK", val: results.passedCount, color: "var(--text-main)", bg: "rgba(255, 255, 255, 0.05)", icon: <CheckCircle size={16}/> },
                         { label: "Errores Críticos", val: results.errorCount, color: "var(--error)", bg: "rgba(255, 77, 77, 0.05)", icon: <XCircle size={16}/> },
                         { label: "Advertencias", val: results.warningCount, color: "var(--warning)", bg: "rgba(255, 193, 7, 0.05)", icon: <AlertCircle size={16}/> }
                       ].map((s, i) => (
@@ -274,16 +332,16 @@ export default function Home() {
                     </div>
                     
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
-                      {getCategoryStats().map((cat, i) => (
+                      {getGroupedStats().map((cat, i) => (
                         <div key={i} className="category-card">
                           <div className="flex-between" style={{ marginBottom: '1rem' }}>
                             <span style={{ fontWeight: 800, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{cat.name}</span>
-                            <span style={{ fontWeight: 900, fontSize: '1.1rem', color: cat.score >= 80 ? 'var(--success)' : cat.score >= 50 ? 'var(--warning)' : 'var(--error)' }}>{cat.score}%</span>
+                            <span style={{ fontWeight: 900, fontSize: '1.1rem', color: cat.score >= 50 ? 'var(--warning)' : 'var(--error)' }}>{cat.score}%</span>
                           </div>
                           <div className="progress-bar-bg">
                             <div className="progress-bar-fill" style={{ 
                               width: `${cat.score}%`, 
-                              background: cat.score >= 80 ? 'var(--success)' : cat.score >= 50 ? 'var(--warning)' : 'var(--error)',
+                              background: cat.score >= 50 ? 'var(--warning)' : 'var(--error)',
                               boxShadow: `0 0 10px ${cat.score >= 80 ? 'var(--success)' : cat.score >= 50 ? 'var(--warning)' : 'var(--error)'}40`
                             }}></div>
                           </div>
@@ -354,12 +412,12 @@ export default function Home() {
                                   <td>
                                       <div style={{ fontWeight: 800, marginBottom: '0.25rem', fontSize: '0.9rem' }}>{item.rule}</div>
                                       <div style={{ fontSize: '0.6rem', color: '#64748B', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: item.status === 'passed' ? 'var(--success)' : item.status === 'error' ? 'var(--error)' : 'var(--warning)' }}></div>
+                                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: item.status === 'error' ? 'var(--error)' : item.status === 'warning' ? 'var(--warning)' : 'transparent' }}></div>
                                         {item.category || 'REGLA'}
                                       </div>
                                   </td>
                                   <td style={{ color: '#94A3B8', fontSize: '0.8rem' }}>{item.expected || '—'}</td>
-                                  <td style={{ fontWeight: 700, fontSize: '0.8rem', color: item.status === 'passed' ? 'var(--accent)' : 'var(--text-main)' }}>{item.actual || '—'}</td>
+                                  <td style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)' }}>{item.actual || '—'}</td>
                                   <td style={{ textAlign: 'center' }}>
                                       {item.paragraphIndex !== undefined ? (
                                         <span style={{ padding: '0.2rem 0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', fontSize: '0.7rem', color: '#64748B', fontWeight: 800 }}>
@@ -368,7 +426,7 @@ export default function Home() {
                                       ) : '—'}
                                   </td>
                                   <td style={{ textAlign: 'right' }}>
-                                      <span className={`badge ${item.status === 'passed' ? 'badge-success' : item.status === 'error' ? 'badge-error' : 'badge-warning'}`}>
+                                      <span className={`badge ${item.status === 'error' ? 'badge-error' : item.status === 'warning' ? 'badge-warning' : ''}`}>
                                         {item.status}
                                       </span>
                                   </td>

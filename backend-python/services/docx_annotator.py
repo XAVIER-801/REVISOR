@@ -18,7 +18,10 @@ from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
 import os
+import re
+import zipfile
 import traceback
+import io
 
 # ── Configuración global del anotador ─────────────────────────────────────
 MAX_COMMENTS = 1500            # Antes: 400. Tesis grandes ahora cubiertas completas
@@ -164,8 +167,8 @@ class DocxAnnotator:
                     # ── Procesamiento normal (no tabla) ──
                     # Elegir color según severidad más grave
                     if all_ortografia:
-                        color = WD_COLOR_INDEX.BRIGHT_GREEN
-                        needs_comment = True
+                        color = None
+                        needs_comment = False
                     elif worst_status == "error":
                         color = WD_COLOR_INDEX.RED
                         needs_comment = True
@@ -173,10 +176,12 @@ class DocxAnnotator:
                         color = WD_COLOR_INDEX.YELLOW
                         needs_comment = any_priority
                     else:
-                        color = WD_COLOR_INDEX.TURQUOISE
+                        # observation / info / passed → sin resaltado
+                        color = None
                         needs_comment = False
 
-                    self._apply_highlight(target, color)
+                    if color is not None:
+                        self._apply_highlight(target, color)
 
                     if needs_comment:
                         comment_text = self._build_grouped_comment_text(unique_obs)
@@ -195,6 +200,17 @@ class DocxAnnotator:
             out_name = f"auditado_{os.path.basename(self.original_path)}"
             out_path = os.path.join(os.path.dirname(self.original_path), out_name)
             self.doc.save(out_path)
+
+            # 9. Resaltar números de página en footers (rojo si hay error de paginación)
+            try:
+                has_page_errors = any(
+                    r.get("status") == "error" and "pag" in (r.get("category") or "").lower()
+                    for r in results
+                )
+                if has_page_errors:
+                    self._highlight_footer_page_numbers(out_path)
+            except Exception as footer_err:
+                print(f"⚠️ Error resaltando footers: {footer_err}")
             return out_path, out_name
         except Exception as e:
             print(f"🛑 Error en Anotador: {str(e)}")
@@ -713,3 +729,63 @@ class DocxAnnotator:
             p_extra.runs[0].font.color.rgb = RGBColor(0, 51, 102)
 
         first.insert_paragraph_before("").add_run().add_break(WD_BREAK.PAGE)
+
+    def _highlight_footer_page_numbers(self, docx_path):
+        """Resalta los números de página en los footers del documento (rojo)."""
+        if not docx_path or not os.path.exists(docx_path):
+            return
+
+        try:
+            from lxml import etree
+            import io
+
+            buffer = io.BytesIO()
+            with open(docx_path, 'rb') as f:
+                buffer.write(f.read())
+
+            modified = False
+            ns = {'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+            with zipfile.ZipFile(buffer, 'a') as z:
+                footer_files = [n for n in z.namelist() if re.match(r'word/footer\d*\.xml', n)]
+                for fpath in footer_files:
+                    xml_bytes = z.read(fpath)
+                    root = etree.fromstring(xml_bytes)
+                    doc_modified = False
+
+                    for p in root.iter(f'{{{ns["w"]}}}p'):
+                        has_page = False
+                        for instr in p.iter(f'{{{ns["w"]}}}instrText'):
+                            if instr.text and 'PAGE' in instr.text.upper():
+                                has_page = True
+                                break
+                        for fld in p.iter(f'{{{ns["w"]}}}fldSimple'):
+                            instr = fld.get(f'{{{ns["w"]}}}instr', '')
+                            if 'PAGE' in instr.upper():
+                                has_page = True
+                                break
+
+                        if not has_page:
+                            continue
+
+                        for r_el in p.iter(f'{{{ns["w"]}}}r'):
+                            rpr = r_el.find(f'{{{ns["w"]}}}rPr')
+                            if rpr is None:
+                                rpr = etree.SubElement(r_el, f'{{{ns["w"]}}}rPr')
+                            old_hl = rpr.find(f'{{{ns["w"]}}}highlight')
+                            if old_hl is not None:
+                                rpr.remove(old_hl)
+                            hl = etree.SubElement(rpr, f'{{{ns["w"]}}}highlight')
+                            hl.set(f'{{{ns["w"]}}}val', 'red')
+
+                        doc_modified = True
+
+                    if doc_modified:
+                        modified = True
+                        z.writestr(fpath, etree.tostring(root, xml_declaration=True, encoding='UTF-8', standalone=True))
+
+            if modified:
+                with open(docx_path, 'wb') as f:
+                    f.write(buffer.getvalue())
+                print("[Annotator] Footers con PAGE resaltados en ROJO.")
+        except Exception as e:
+            print(f"[Annotator] Error en _highlight_footer_page_numbers: {e}")
