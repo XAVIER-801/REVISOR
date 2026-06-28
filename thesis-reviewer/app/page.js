@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { 
   Upload, FileText, CheckCircle, AlertCircle, XCircle, 
   RotateCcw, Download, Layout, Type, AlignLeft, 
@@ -21,6 +21,7 @@ export default function Home() {
   const [showPreview, setShowPreview] = useState(false);
   const [viewMode, setViewMode] = useState('dashboard'); // 'dashboard', 'table', 'preview'
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [expandedRow, setExpandedRow] = useState(null);
 
   useEffect(() => {
     let timer;
@@ -396,9 +397,9 @@ export default function Home() {
                           <thead>
                             <tr>
                                 <th style={{ width: '50px', textAlign: 'center' }}>#</th>
-                                <th>Regla y Estructura</th>
-                                <th>Estándar Esperado</th>
-                                <th>Valor Detectado</th>
+                                <th>Área y Regla</th>
+                                <th>Hallado</th>
+                                <th>Requerido</th>
                                 <th style={{ textAlign: 'center' }}>Pág</th>
                                 <th style={{ textAlign: 'right' }}>Estado</th>
                             </tr>
@@ -407,6 +408,7 @@ export default function Home() {
                             {results.results
                               .filter(item => activeFilter === 'all' || item.status === activeFilter)
                               .map((item, idx) => (
+                                <React.Fragment key={idx}>
                                 <tr key={idx}>
                                   <td style={{ textAlign: 'center', color: '#475569', fontWeight: 800 }}>{idx + 1}</td>
                                   <td>
@@ -416,8 +418,8 @@ export default function Home() {
                                         {item.category || 'REGLA'}
                                       </div>
                                   </td>
-                                  <td style={{ color: '#94A3B8', fontSize: '0.8rem' }}>{item.expected || '—'}</td>
                                   <td style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-main)' }}>{item.actual || '—'}</td>
+                                  <td style={{ color: '#94A3B8', fontSize: '0.8rem' }}>{item.expected || '—'}</td>
                                   <td style={{ textAlign: 'center' }}>
                                       {item.paragraphIndex !== undefined ? (
                                         <span style={{ padding: '0.2rem 0.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', fontSize: '0.7rem', color: '#64748B', fontWeight: 800 }}>
@@ -431,6 +433,37 @@ export default function Home() {
                                       </span>
                                   </td>
                                 </tr>
+                                <tr>
+                                  <td colSpan="6" style={{ padding: '0', border: 'none' }}>
+                                    <div
+                                      onClick={() => setExpandedRow(expandedRow === `${idx}` ? null : `${idx}`)}
+                                      style={{
+                                        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
+                                        padding: '0.4rem 1rem', fontSize: '0.65rem', fontWeight: 700,
+                                        color: '#64748B', borderTop: '1px solid rgba(255,255,255,0.03)',
+                                        userSelect: 'none',
+                                      }}
+                                    >
+                                      <ChevronRight size={12} style={{
+                                        transition: 'transform 0.2s',
+                                        transform: expandedRow === `${idx}` ? 'rotate(90deg)' : 'rotate(0deg)',
+                                      }} />
+                                      {expandedRow === `${idx}` ? 'Ocultar descripción' : 'Ver descripción'}
+                                    </div>
+                                    {expandedRow === `${idx}` && (
+                                      <div style={{
+                                        padding: '0.5rem 1rem 0.8rem 1rem', fontSize: '0.75rem',
+                                        color: '#94A3B8', lineHeight: '1.6', borderTop: '1px solid rgba(255,255,255,0.03)',
+                                      }}>
+                                        <strong>Área:</strong> {item.category}<br/>
+                                        <strong>Hallado:</strong> {item.actual || '—'}<br/>
+                                        <strong>Requerido:</strong> {item.expected || '—'}<br/>
+                                        <strong>Descripción:</strong> {item.message}
+                                      </div>
+                                    )}
+                                  </td>
+                                </tr>
+                                </React.Fragment>
                             ))}
                           </tbody>
                       </table>
@@ -455,24 +488,47 @@ export default function Home() {
                                   <div style={{ padding: '0.4rem 0.8rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', fontSize: '0.6rem', fontWeight: 900, color: 'var(--accent)' }}>
                                      OBS #{(idx + 1).toString().padStart(2, '0')}
                                   </div>
-                                  <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>{item.rule}</span>
+                                  <div>
+                                    <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>{item.rule}</div>
+                                    <div style={{ fontSize: '0.6rem', color: '#64748B', fontWeight: 700, marginTop: '0.15rem' }}>{item.category}</div>
+                                  </div>
                                </div>
                                <span style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: 800 }}>PÁGINA {Math.floor(item.paragraphIndex / 20) + 1}</span>
                             </div>
-                            
-                            <p style={{ fontSize: '0.8rem', color: '#94A3B8', lineHeight: '1.6', marginBottom: '1rem' }}>
-                               {item.message}
-                            </p>
 
-                            <div className="highlight-box">
+                            <div className="highlight-box" style={{ marginBottom: '0.75rem' }}>
                                <div style={{ fontSize: '0.6rem', textTransform: 'uppercase', color: '#475569', marginBottom: '0.5rem', fontWeight: 800 }}>Fragmento detectado:</div>
                                "{item.paragraphText}"
                             </div>
 
-                            <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem' }}>
-                               <div style={{ fontSize: '0.7rem', color: 'var(--error)', fontWeight: 700 }}>ESPERADO: {item.expected}</div>
-                               <div style={{ fontSize: '0.7rem', color: 'white', opacity: 0.5, fontWeight: 700 }}>ACTUAL: {item.actual}</div>
+                            <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.75rem' }}>
+                               <div style={{ fontSize: '0.7rem', color: 'var(--error)', fontWeight: 700 }}>HALLADO: {item.actual}</div>
+                               <div style={{ fontSize: '0.7rem', color: 'white', opacity: 0.5, fontWeight: 700 }}>REQUERIDO: {item.expected}</div>
                             </div>
+
+                            <div
+                              onClick={() => setExpandedRow(expandedRow === `preview-${idx}` ? null : `preview-${idx}`)}
+                              style={{
+                                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem',
+                                padding: '0.4rem 0', fontSize: '0.65rem', fontWeight: 700,
+                                color: '#64748B', userSelect: 'none',
+                              }}
+                            >
+                              <ChevronRight size={12} style={{
+                                transition: 'transform 0.2s',
+                                transform: expandedRow === `preview-${idx}` ? 'rotate(90deg)' : 'rotate(0deg)',
+                              }} />
+                              {expandedRow === `preview-${idx}` ? 'Ocultar descripción' : 'Ver descripción'}
+                            </div>
+                            {expandedRow === `preview-${idx}` && (
+                              <div style={{
+                                marginTop: '0.5rem', padding: '0.75rem', borderRadius: '8px',
+                                background: 'rgba(255,255,255,0.03)', fontSize: '0.75rem',
+                                color: '#94A3B8', lineHeight: '1.6',
+                              }}>
+                                {item.message}
+                              </div>
+                            )}
                           </div>
                       ))}
                       {results.results.filter(r => r.status !== 'passed' && r.paragraphText).length === 0 && (
